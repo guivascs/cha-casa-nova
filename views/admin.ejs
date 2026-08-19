@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Administrativo</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>🔧 Painel Administrativo</h1>
+    <a href="/logout">Sair</a>
+  </header>
+  
+  <main class="admin">
+    <section class="card">
+      <h2 style="margin-top:0;color:#667eea;">➕ Adicionar Presente</h2>
+      
+      <form method="POST" action="/admin/gifts">
+        <label for="name">Nome do presente:</label>
+        <input 
+          type="text" 
+          id="name" 
+          name="name" 
+          placeholder="Ex: Jogo de Panelas"
+          required
+        >
+        
+        <label for="description">Descriç»£o:</label>
+        <textarea 
+          id="description" 
+          name="description" 
+          rows="3"
+          placeholder="Ex: Jogo de panelas antiaderentes com 10 peças"
+        ></textarea>
+        
+        <label for="price">Preç»§o estimado (R$):</label>
+        <input 
+          type="number" 
+          id="price" 
+          name="price" 
+          step="0.01" 
+          min="0"
+          placeholder="Ex: 299.90"
+        >
+        
+        <label for="image_url">URL da imagem (opcional):</label>
+        <input 
+          type="url" 
+          id="image_url" 
+          name="image_url" 
+          placeholder="https://exemplo.com/imagem.jpg"
+        >
+        
+        <button type="submit">Adicionar Presente</button>
+      </form>
+    </section>
+    
+    <section class="card wide">
+      <h2 style="margin-top:0;color:#667eea;">📦 Reservas</h2>
+      
+      <% if (gifts.length === 0) { %>
+        <p style="color:#999;text-align:center;padding:40px;">
+          Nenhum presente cadastrado ainda.
+        </p>
+      <% } else { %>
+        <table>
+          <thead>
+            <tr>
+              <th>Presente</th>
+              <th>Preç»§o</th>
+              <th>Status</th>
+              <th>Reservado por</th>
+              <th>Aç»µes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% gifts.forEach(function(gift) { %>
+              <tr>
+                <td>
+                  <strong><%= gift.name %></strong>
+                  <% if (gift.description) { %>
+                    <small><%= gift.description %></small>
+                  <% } %>
+                </td>
+                <td>
+                  <%= gift.price ? 'R$ ' + Number(gift.price).toFixed(2).replace('.', ',') : '-' %>
+                </td>
+                <td>
+                  <strong style="color:<%= gift.reserved_by ? '#c62828' : '#2e7d32' %>">
+                    <%= gift.reserved_by ? '🔒 Reservado' : '✓ Disponível' %>
+                  </strong>
+                </td>
+                <td>
+                  <%= gift.reserved_by_name || '-' %>
+                </td>
+                <td>
+                  <% if (gift.reserved_by) { %>
+                    <form class="inline" method="POST" action="/admin/gifts/<%= gift.id %>/reset">
+                      <button type="submit">Resetar</button>
+                    </form>
+                  <% } %>
+                  <form 
+                    class="inline" 
+                    method="POST" 
+                    action="/admin/gifts/<%= gift.id %>/delete" 
+                    onsubmit="return confirm('Tem certeza que deseja excluir este presente?')"
+                  >
+                    <button type="submit" class="danger">Excluir</button>
+                  </form>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      <% } %>
+    </section>
+  </main>
+</body>
+</html>

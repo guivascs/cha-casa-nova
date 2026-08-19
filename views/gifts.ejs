@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lista de Presentes</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>🎁 Lista de Presentes</h1>
+    <a href="/logout">Sair</a>
+  </header>
+  
+  <main>
+    <p style="text-align:center;color:white;font-size:1.2em;margin-bottom:30px;">
+      Olá, <strong><%= userName %></strong>! Obrigado por participar do nosso chá de casa nova! 🏠
+    </p>
+    
+    <div class="grid">
+      <% if (gifts.length === 0) { %>
+        <p style="text-align:center;color:white;grid-column:1/-1;">
+          Nenhum presente cadastrado ainda.
+        </p>
+      <% } %>
+      
+      <% gifts.forEach(function(gift) { %>
+        <article class="gift <%= gift.reserved_by ? 'reserved' : '' %>">
+          <% if (gift.image_url) { %>
+            <img src="<%= gift.image_url %>" alt="<%= gift.name %>" onerror="this.style.display='none'">
+          <% } else { %>
+            <div style="height:200px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:4em;color:#ccc;">🎁</div>
+          <% } %>
+          
+          <h2><%= gift.name %></h2>
+          
+          <% if (gift.description) { %>
+            <p><%= gift.description %></p>
+          <% } %>
+          
+          <% if (gift.price) { %>
+            <strong>R$ <%= Number(gift.price).toFixed(2).replace('.', ',') %></strong>
+          <% } %>
+          
+          <% if (gift.reserved_by) { %>
+            <button disabled>🔒 Reservado</button>
+          <% } else { %>
+            <button onclick="reserve(<%= gift.id %>, '<%= gift.name.replace(/'/g, "\\'") %>')">
+              ✨ Escolher presente
+            </button>
+          <% } %>
+        </article>
+      <% }); %>
+    </div>
+  </main>
+  
+  <script>
+    async function reserve(id, name) {
+      const confirmed = confirm(
+        `Você»ª está escolhendo: ${name}\n\n` +
+        `⚠️ Após confirmar, a escolha NÃO poderá ser alterada.\n\n` +
+        `Deseja continuar?`
+      );
+      
+      if (!confirmed) return;
+      
+      try {
+        const response = await fetch(`/gifts/${id}/reserve`, { method: 'POST' });
+        
+        if (response.ok) {
+          location.reload();
+        } else {
+          const data = await response.json();
+          alert(data.error || 'Nã»£o foi possível reservar. Tente novamente.');
+          location.reload();
+        }
+      } catch (error) {
+        console.error(error);
+        alert('Erro de conexã»£o. Tente novamente.');
+        location.reload();
+      }
+    }
+  </script>
+</body>
+</html>
