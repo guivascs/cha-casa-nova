@@ -17,47 +17,40 @@
       Olá, <strong><%= userName %></strong>! Obrigado por participar do nosso chá de casa nova! 🏠
     </p>
     
-    <div class="grid">
+    <div class="list-container">
       <% if (gifts.length === 0) { %>
-        <p style="text-align:center;color:white;grid-column:1/-1;">
+        <p style="text-align:center;color:white;">
           Nenhum presente cadastrado ainda.
         </p>
+      <% } else { %>
+        <% gifts.forEach(function(gift) { %>
+          <div class="list-item <%= gift.reserved_by ? 'reserved' : '' %>">
+            <div class="list-content">
+              <h3><%= gift.name %></h3>
+              <% if (gift.description) { %>
+                <p><%= gift.description %></p>
+              <% } %>
+            </div>
+            
+            <div class="list-action">
+              <% if (gift.reserved_by) { %>
+                <span class="badge reserved">🔒 Reservado</span>
+              <% } else { %>
+                <button onclick="reserve(<%= gift.id %>, '<%= gift.name.replace(/'/g, "\\'") %>')">
+                  ✨ Escolher
+                </button>
+              <% } %>
+            </div>
+          </div>
+        <% }); %>
       <% } %>
-      
-      <% gifts.forEach(function(gift) { %>
-        <article class="gift <%= gift.reserved_by ? 'reserved' : '' %>">
-          <% if (gift.image_url) { %>
-            <img src="<%= gift.image_url %>" alt="<%= gift.name %>" onerror="this.style.display='none'">
-          <% } else { %>
-            <div style="height:200px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:4em;color:#ccc;">🎁</div>
-          <% } %>
-          
-          <h2><%= gift.name %></h2>
-          
-          <% if (gift.description) { %>
-            <p><%= gift.description %></p>
-          <% } %>
-          
-          <% if (gift.price) { %>
-            <strong>R$ <%= Number(gift.price).toFixed(2).replace('.', ',') %></strong>
-          <% } %>
-          
-          <% if (gift.reserved_by) { %>
-            <button disabled>🔒 Reservado</button>
-          <% } else { %>
-            <button onclick="reserve(<%= gift.id %>, '<%= gift.name.replace(/'/g, "\\'") %>')">
-              ✨ Escolher presente
-            </button>
-          <% } %>
-        </article>
-      <% }); %>
     </div>
   </main>
   
   <script>
     async function reserve(id, name) {
       const confirmed = confirm(
-        `Você»ª está escolhendo: ${name}\n\n` +
+        `Você·ª está escolhendo: ${name}\n\n` +
         `⚠️ Após confirmar, a escolha NÃO poderá ser alterada.\n\n` +
         `Deseja continuar?`
       );
@@ -71,12 +64,12 @@
           location.reload();
         } else {
           const data = await response.json();
-          alert(data.error || 'Nã»£o foi possível reservar. Tente novamente.');
+          alert(data.error || 'Nã·£o foi possível reservar. Tente novamente.');
           location.reload();
         }
       } catch (error) {
         console.error(error);
-        alert('Erro de conexã»£o. Tente novamente.');
+        alert('Erro de conexã·£o. Tente novamente.');
         location.reload();
       }
     }

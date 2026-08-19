@@ -26,23 +26,13 @@
           required
         >
         
-        <label for="description">Descriç»£o:</label>
+        <label for="description">Descriç·£o:</label>
         <textarea 
           id="description" 
           name="description" 
           rows="3"
           placeholder="Ex: Jogo de panelas antiaderentes com 10 peças"
         ></textarea>
-        
-        <label for="price">Preç»§o estimado (R$):</label>
-        <input 
-          type="number" 
-          id="price" 
-          name="price" 
-          step="0.01" 
-          min="0"
-          placeholder="Ex: 299.90"
-        >
         
         <label for="image_url">URL da imagem (opcional):</label>
         <input 
@@ -68,10 +58,10 @@
           <thead>
             <tr>
               <th>Presente</th>
-              <th>Preç»§o</th>
+              <th>Descriç·£o</th>
               <th>Status</th>
               <th>Reservado por</th>
-              <th>Aç»µes</th>
+              <th>Aç·µes</th>
             </tr>
           </thead>
           <tbody>
@@ -79,12 +69,9 @@
               <tr>
                 <td>
                   <strong><%= gift.name %></strong>
-                  <% if (gift.description) { %>
-                    <small><%= gift.description %></small>
-                  <% } %>
                 </td>
                 <td>
-                  <%= gift.price ? 'R$ ' + Number(gift.price).toFixed(2).replace('.', ',') : '-' %>
+                  <%= gift.description || '-' %>
                 </td>
                 <td>
                   <strong style="color:<%= gift.reserved_by ? '#c62828' : '#2e7d32' %>">
