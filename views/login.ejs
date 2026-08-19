@@ -3,34 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chá·« de Casa Nova - Login</title>
+  <title>Chá de Casa Nova - Login</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <main class="card">
-    <h1>🏠 Chá·« de Casa Nova</h1>
+    <h1>🏠 Chá de Casa Nova</h1>
     <p>Informe seu nome para ver a lista de presentes.</p>
-    
-    <% if (error) { %>
-      <div class="error"><%= error %></div>
-    <% } %>
-    
+    <% if (error) { %><div class="error"><%= error %></div><% } %>
     <form method="POST" action="/login">
       <label for="name">Seu nome:</label>
-      <input 
-        type="text" 
-        id="name" 
-        name="name" 
-        placeholder="Ex: Maria Silva"
-        required 
-        maxlength="80" 
-        autofocus
-      >
-      
+      <input id="name" name="name" type="text" placeholder="Ex: Maria Silva" required maxlength="80" autofocus>
       <button type="submit">Continuar</button>
     </form>
-    
-    <a href="/admin/login">Á·rea administrativa</a>
+    <a href="/admin/login">Área administrativa</a>
   </main>
 </body>
 </html>

@@ -3,37 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Configurar Admin</title>
+  <title>Configurar administrador</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <main class="card">
-    <h1>🔑 Configurar Administrador</h1>
-    <p>Crie sua conta de administrador</p>
-    
-    <% if (error) { %>
-      <div class="error"><%= error %></div>
-    <% } %>
-    
+    <h1>🔑 Configurar administrador</h1>
+    <p>Crie sua conta de administrador.</p>
+    <% if (error) { %><div class="error"><%= error %></div><% } %>
     <form method="POST">
       <label for="name">Seu nome:</label>
-      <input 
-        type="text" 
-        id="name" 
-        name="name" 
-        required
-      >
-      
-      <label for="password">Senha (mí·´nimo 6 caracteres):</label>
-      <input 
-        type="password" 
-        id="password" 
-        name="password" 
-        required 
-        minlength="6"
-      >
-      
-      <button type="submit">Criar Administrador</button>
+      <input id="name" name="name" type="text" required>
+      <label for="password">Senha (mínimo 6 caracteres):</label>
+      <input id="password" name="password" type="password" required minlength="6">
+      <button type="submit">Criar administrador</button>
     </form>
   </main>
 </body>

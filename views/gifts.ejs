@@ -3,74 +3,49 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lista de Presentes</title>
+  <title>Lista de presentes</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <header>
-    <h1>🎁 Lista de Presentes</h1>
+    <h1>🎁 Lista de presentes</h1>
     <a href="/logout">Sair</a>
   </header>
-  
   <main>
-    <p style="text-align:center;color:white;font-size:1.2em;margin-bottom:30px;">
-      Olá, <strong><%= userName %></strong>! Obrigado por participar do nosso chá de casa nova! 🏠
-    </p>
-    
+    <p class="welcome">Olá, <strong><%= userName %></strong>! Obrigado por participar do nosso chá de casa nova! 🏠</p>
     <div class="list-container">
       <% if (gifts.length === 0) { %>
-        <p style="text-align:center;color:white;">
-          Nenhum presente cadastrado ainda.
-        </p>
-      <% } else { %>
-        <% gifts.forEach(function(gift) { %>
-          <div class="list-item <%= gift.reserved_by ? 'reserved' : '' %>">
-            <div class="list-content">
-              <h3><%= gift.name %></h3>
-              <% if (gift.description) { %>
-                <p><%= gift.description %></p>
-              <% } %>
-            </div>
-            
-            <div class="list-action">
-              <% if (gift.reserved_by) { %>
-                <span class="badge reserved">🔒 Reservado</span>
-              <% } else { %>
-                <button onclick="reserve(<%= gift.id %>, '<%= gift.name.replace(/'/g, "\\'") %>')">
-                  ✨ Escolher
-                </button>
-              <% } %>
-            </div>
-          </div>
-        <% }); %>
+        <p class="empty">Nenhum presente cadastrado ainda.</p>
       <% } %>
+      <% gifts.forEach(function (gift) { %>
+        <article class="list-item <%= gift.reserved_by ? 'reserved' : '' %>">
+          <div class="list-content">
+            <h2><%= gift.name %></h2>
+            <% if (gift.description) { %><p><%= gift.description %></p><% } %>
+          </div>
+          <div class="list-action">
+            <% if (gift.reserved_by) { %>
+              <span class="badge reserved">🔒 Reservado</span>
+            <% } else { %>
+              <button type="button" onclick="reserve(<%= gift.id %>, <%- JSON.stringify(gift.name) %>)">Escolher presente</button>
+            <% } %>
+          </div>
+        </article>
+      <% }); %>
     </div>
   </main>
-  
   <script>
     async function reserve(id, name) {
-      const confirmed = confirm(
-        `Você·ª está escolhendo: ${name}\n\n` +
-        `⚠️ Após confirmar, a escolha NÃO poderá ser alterada.\n\n` +
-        `Deseja continuar?`
-      );
-      
+      const confirmed = confirm(`Você está escolhendo: ${name}\n\nApós confirmar, esta escolha não poderá ser alterada.\n\nDeseja continuar?`);
       if (!confirmed) return;
-      
       try {
         const response = await fetch(`/gifts/${id}/reserve`, { method: 'POST' });
-        
-        if (response.ok) {
-          location.reload();
-        } else {
-          const data = await response.json();
-          alert(data.error || 'Nã·£o foi possível reservar. Tente novamente.');
-          location.reload();
-        }
-      } catch (error) {
-        console.error(error);
-        alert('Erro de conexã·£o. Tente novamente.');
+        if (response.ok) return location.reload();
+        const data = await response.json();
+        alert(data.error || 'Não foi possível reservar este presente.');
         location.reload();
+      } catch (error) {
+        alert('Erro de conexão. Tente novamente.');
       }
     }
   </script>
