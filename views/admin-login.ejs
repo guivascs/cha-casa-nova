@@ -11,13 +11,12 @@
     <h1>🔐 Administração</h1>
     <% if (error) { %><div class="error"><%= error %></div><% } %>
     <form method="POST" action="/admin/login">
-      <label for="name">Nome:</label>
-      <input id="name" name="name" type="text" required autocomplete="username">
+      <label for="name">Usuário:</label>
+      <input id="name" name="name" type="text" required autocomplete="username" autofocus>
       <label for="password">Senha:</label>
       <input id="password" name="password" type="password" required autocomplete="current-password">
       <button type="submit">Entrar</button>
     </form>
-    <p class="admin-hint">Acesso inicial:<br><strong>Usuário:</strong> admin<br><strong>Senha:</strong> admin</p>
     <a href="/login">← Voltar</a>
   </main>
 </body>

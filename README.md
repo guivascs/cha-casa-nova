@@ -1,14 +1,14 @@
-# 🏠 Chá»« de Casa Nova
+# 🏠 Chá de Casa Nova
 
 Sistema completo para gerenciar presentes de chá de casa nova.
 
 ## ✨ Funcionalidades
 
 - **Convidados**: Login apenas com nome, visualiza lista, reserva presentes
-- **Admin**: Vê»ª quem reservou o quê, gerencia lista de presentes
+- **Admin**: Vê quem reservou o quê, adiciona/exclui presentes, importa lista via CSV e altera senha
 - **Privacidade**: Convidados não veem quem reservou, apenas o admin
 
-## 🚀 Instalaç»£o
+## 🚀 Instalação
 
 ```bash
 git clone https://github.com/guivascs/cha-casa-nova.git
@@ -18,11 +18,15 @@ cp .env.example .env
 npm run dev
 ```
 
-## 🔐 Primeiro acesso
+## 🔐 Acesso Administrativo
 
-1. Acesse `http://localhost:3000/setup-admin`
-2. Crie sua conta de administrador
-3. Acesse `http://localhost:3000/admin/login`
+- Acesse `http://localhost:3000/admin/login`
+- Você pode definir o usuário e senha do admin no arquivo `.env`:
+  ```env
+  ADMIN_USERNAME=seu_usuario
+  ADMIN_PASSWORD=sua_senha_segura
+  ```
+- Ou alterar a senha diretamente no painel administrativo em `http://localhost:3000/admin`.
 
 ## 📁 Estrutura
 
@@ -39,8 +43,7 @@ cha-casa-nova/
     ├── login.ejs
     ├── gifts.ejs
     ├── admin-login.ejs
-    ├── admin.ejs
-    └── setup-admin.ejs
+    └── admin.ejs
 ```
 
 ## 🛠️ Tecnologias
@@ -49,12 +52,6 @@ cha-casa-nova/
 - EJS (templates)
 - SQLite (better-sqlite3)
 - bcryptjs (criptografia)
-
-## 📝 Notas
-
-- Presentes reservados ficam em vermelho
-- Uma vez reservado, só admin pode resetar
-- Convidados podem cancelar sua própria reserva
 
 ## 🌐 Deploy
 

@@ -35,10 +35,20 @@ const giftColumns = db.prepare('PRAGMA table_info(gifts)').all();
 if (!giftColumns.some(column => column.name === 'category')) db.exec("ALTER TABLE gifts ADD COLUMN category TEXT NOT NULL DEFAULT 'Outros'");
 db.prepare("UPDATE gifts SET category = 'Outros' WHERE category IS NULL OR TRIM(category) = ''").run();
 
-const adminHash = bcrypt.hashSync('admin', 12);
-const adminUser = db.prepare('SELECT id FROM users WHERE name = ? COLLATE NOCASE').get('admin');
-if (adminUser) db.prepare('UPDATE users SET name = ?, is_admin = 1, password_hash = ? WHERE id = ?').run('admin', adminHash, adminUser.id);
-else db.prepare('INSERT INTO users (name, is_admin, password_hash) VALUES (?, 1, ?)').run('admin', adminHash);
+// Initialize or update admin credentials
+const envAdminName = (process.env.ADMIN_USERNAME || 'admin').trim();
+const envAdminPassword = process.env.ADMIN_PASSWORD;
+
+const existingAdmin = db.prepare('SELECT id, name, password_hash FROM users WHERE is_admin = 1 LIMIT 1').get();
+
+if (!existingAdmin) {
+  const defaultPass = envAdminPassword || 'admin';
+  const initialHash = bcrypt.hashSync(defaultPass, 12);
+  db.prepare('INSERT INTO users (name, is_admin, password_hash) VALUES (?, 1, ?)').run(envAdminName, initialHash);
+} else if (envAdminPassword) {
+  const hash = bcrypt.hashSync(envAdminPassword, 12);
+  db.prepare('UPDATE users SET name = ?, password_hash = ? WHERE id = ?').run(envAdminName, hash, existingAdmin.id);
+}
 
 app.set('view engine', 'ejs'); app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true })); app.use(express.json()); app.use(express.static(path.join(__dirname, 'public')));
@@ -59,7 +69,33 @@ app.get('/logout', (req, res) => req.session.destroy(() => res.redirect('/login'
 app.get('/gifts', (req, res, next) => { if (!req.session.userId) return res.redirect('/login'); if (req.session.isAdmin) return res.redirect('/admin'); next(); }, (req, res) => { const gifts = db.prepare('SELECT id,name,category,reserved_by FROM gifts ORDER BY category,name').all(); const groups = CATEGORIES.map(category => ({ category, gifts: gifts.filter(gift => gift.category === category) })).filter(group => group.gifts.length); res.render('gifts', { groups, userName: req.session.userName }); });
 app.post('/gifts/:id/reserve', (req, res, next) => { if (!req.session.userId) return res.status(401).json({ error: 'Faça login antes de escolher um presente.' }); if (req.session.isAdmin) return res.status(403).json({ error: 'O administrador não pode reservar presentes. Saia e entre usando um nome de convidado.' }); next(); }, (req, res) => { const result = db.prepare('UPDATE gifts SET reserved_by = ?, reserved_at = CURRENT_TIMESTAMP WHERE id = ? AND reserved_by IS NULL').run(req.session.userId, req.params.id); if (!result.changes) return res.status(409).json({ error: 'Este presente já foi reservado por outra pessoa.' }); res.json({ ok: true }); });
 
-app.get('/admin', admin, (req, res) => { res.render('admin', { gifts: getGifts(), categories: CATEGORIES, importResult: req.session.importResult || null }); delete req.session.importResult; });
+app.get('/admin', admin, (req, res) => { res.render('admin', { gifts: getGifts(), categories: CATEGORIES, importResult: req.session.importResult || null, passwordResult: req.session.passwordResult || null }); delete req.session.importResult; delete req.session.passwordResult; });
+app.post('/admin/change-password', admin, (req, res) => {
+  const currentPassword = (req.body.currentPassword || '').trim();
+  const newPassword = (req.body.newPassword || '').trim();
+  const confirmPassword = (req.body.confirmPassword || '').trim();
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
+  if (!user || !user.password_hash || !bcrypt.compareSync(currentPassword, user.password_hash)) {
+    req.session.passwordResult = { type: 'error', text: 'Senha atual incorreta.' };
+    return res.redirect('/admin');
+  }
+
+  if (!newPassword || newPassword.length < 6) {
+    req.session.passwordResult = { type: 'error', text: 'A nova senha deve ter no mínimo 6 caracteres.' };
+    return res.redirect('/admin');
+  }
+
+  if (newPassword !== confirmPassword) {
+    req.session.passwordResult = { type: 'error', text: 'A confirmação de senha não confere.' };
+    return res.redirect('/admin');
+  }
+
+  const newHash = bcrypt.hashSync(newPassword, 12);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, req.session.userId);
+  req.session.passwordResult = { type: 'success', text: 'Senha alterada com sucesso!' };
+  res.redirect('/admin');
+});
 app.post('/admin/gifts', admin, (req, res) => { const name = (req.body.name || '').trim(); const category = validCategory(req.body.category); if (name) db.prepare('INSERT INTO gifts(name,category) VALUES(?,?)').run(name, category); res.redirect('/admin'); });
 app.post('/admin/gifts/import', admin, upload.single('csvFile'), (req, res) => { if (!req.file) { req.session.importResult = { type: 'error', text: 'Selecione um arquivo CSV para importar.' }; return res.redirect('/admin'); } if (!req.file.originalname.toLowerCase().endsWith('.csv')) { req.session.importResult = { type: 'error', text: 'O arquivo deve ter extensão .csv.' }; return res.redirect('/admin'); } const gifts = csvGifts(req.file.buffer.toString('utf8')); let added = 0; let skipped = 0; const exists = db.prepare('SELECT 1 FROM gifts WHERE name = ? COLLATE NOCASE AND category = ?'); const insert = db.prepare('INSERT INTO gifts(name,category) VALUES(?,?)'); db.transaction(() => { for (const gift of gifts) { if (exists.get(gift.name, gift.category)) skipped += 1; else { insert.run(gift.name, gift.category); added += 1; } } })(); req.session.importResult = { type: 'success', text: `Importação concluída: ${added} presente(s) adicionado(s) e ${skipped} ignorado(s).` }; res.redirect('/admin'); });
 app.post('/admin/gifts/:id/delete', admin, (req, res) => { db.prepare('DELETE FROM gifts WHERE id = ?').run(req.params.id); res.redirect('/admin'); });

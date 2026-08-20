@@ -1,2 +1,372 @@
 <!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Painel administrativo</title><link rel="stylesheet" href="/style.css"></head><body><header><h1>🔧 Painel administrativo</h1><a href="/logout">Sair</a></header><main class="admin"><section class="admin-sidebar"><section class="card admin-form"><h2>➕ Adicionar presente</h2><form method="POST" action="/admin/gifts"><label for="name">Nome do presente:</label><input id="name" name="name" type="text" placeholder="Ex: Jogo de panelas" required autofocus><label for="category">Ambiente:</label><select id="category" name="category"><% categories.forEach(function(category) { %><option value="<%= category %>"><%= category %></option><% }); %></select><button type="submit">Adicionar presente</button></form></section><section class="card import-card"><h2>📄 Importar CSV</h2><p>Use as colunas <strong>nome,categoria</strong>.</p><form method="POST" action="/admin/gifts/import" enctype="multipart/form-data"><label for="csvFile">Arquivo CSV:</label><input id="csvFile" name="csvFile" type="file" accept=".csv,text/csv" required><button type="submit">Importar presentes</button></form><code>nome,categoria<br>Jogo de panelas,Cozinha<br>Toalhas,Quarto</code></section></section><section class="card wide"><h2>📦 Reservas</h2><% if (importResult) { %><div class="import-result <%= importResult.type %>"><%= importResult.text %></div><% } %><% if (gifts.length === 0) { %><p class="empty-admin">Nenhum presente cadastrado ainda.</p><% } else { %><table><thead><tr><th>Presente</th><th>Ambiente</th><th>Status</th><th>Reservado por</th><th>Ações</th></tr></thead><tbody><% gifts.forEach(function (gift) { %><tr><td><strong><%= gift.name %></strong></td><td><span class="category-tag"><%= gift.category %></span></td><td><strong class="<%= gift.reserved_by ? 'status-reserved' : 'status-available' %>"><%= gift.reserved_by ? '🔒 Reservado' : '✓ Disponível' %></strong></td><td><%= gift.reserved_by_name || '-' %></td><td><% if (gift.reserved_by) { %><form class="inline" method="POST" action="/admin/gifts/<%= gift.id %>/reset"><button type="submit">Resetar</button></form><% } %><form class="inline" method="POST" action="/admin/gifts/<%= gift.id %>/delete" onsubmit="return confirm('Tem certeza que deseja excluir este presente?')"><button type="submit" class="danger">Excluir</button></form></td></tr><% }); %></tbody></table><% } %></section></main></body></html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Administrativo - Chá de Casa Nova</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="admin-page">
+
+  <!-- Header Superior -->
+  <header class="admin-header">
+    <div class="header-brand">
+      <span class="brand-icon">🏡</span>
+      <div>
+        <h1>Painel do Chá de Casa Nova</h1>
+        <p class="header-subtitle">Gerencie os presentes e acompanhe quem já escolheu</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="btn btn-primary" onclick="openModal('modalAddGift')">
+        <span>➕</span> Adicionar Presente
+      </button>
+      <button type="button" class="btn btn-secondary" onclick="openModal('modalImportCsv')">
+        <span>📄</span> Importar CSV
+      </button>
+      <button type="button" class="btn btn-secondary" onclick="openModal('modalChangePassword')">
+        <span>🔒</span> Senha
+      </button>
+      <a href="/logout" class="btn btn-outline-danger">Sair</a>
+    </div>
+  </header>
+
+  <main class="admin-dashboard">
+
+    <!-- Mensagens de Feedback -->
+    <% if (importResult) { %>
+      <div class="alert alert-<%= importResult.type %>">
+        <%= importResult.text %>
+      </div>
+    <% } %>
+
+    <% if (passwordResult) { %>
+      <div class="alert alert-<%= passwordResult.type %>">
+        <%= passwordResult.text %>
+      </div>
+    <% } %>
+
+    <!-- Cards de Métricas / Resumo -->
+    <%
+      const totalGifts = gifts.length;
+      const reservedGifts = gifts.filter(g => g.reserved_by).length;
+      const availableGifts = totalGifts - reservedGifts;
+      const percentReserved = totalGifts > 0 ? Math.round((reservedGifts / totalGifts) * 100) : 0;
+    %>
+    <section class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon icon-total">🎁</div>
+        <div class="stat-content">
+          <span class="stat-label">Total de Presentes</span>
+          <span class="stat-value"><%= totalGifts %></span>
+        </div>
+      </div>
+
+      <div class="stat-card highlight-reserved">
+        <div class="stat-icon icon-reserved">🔒</div>
+        <div class="stat-content">
+          <span class="stat-label">Presentes Reservados</span>
+          <div class="stat-flex">
+            <span class="stat-value"><%= reservedGifts %></span>
+            <span class="stat-badge"><%= percentReserved %>% do total</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: <%= percentReserved %>%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon icon-available">✨</div>
+        <div class="stat-content">
+          <span class="stat-label">Disponíveis</span>
+          <span class="stat-value text-success"><%= availableGifts %></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Barra de Filtros e Busca -->
+    <section class="filter-toolbar">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Buscar por presente ou nome do convidado..." oninput="filterGifts()">
+        <button type="button" id="clearSearch" class="btn-clear" onclick="clearSearchInput()" style="display:none;">✕</button>
+      </div>
+
+      <div class="filter-controls">
+        <!-- Abas de Status -->
+        <div class="status-pills" role="tablist">
+          <button type="button" class="pill active" data-status="all" onclick="setStatusFilter('all', this)">
+            Todos <span class="pill-count">(<%= totalGifts %>)</span>
+          </button>
+          <button type="button" class="pill pill-reserved" data-status="reserved" onclick="setStatusFilter('reserved', this)">
+            🔒 Reservados <span class="pill-count">(<%= reservedGifts %>)</span>
+          </button>
+          <button type="button" class="pill pill-available" data-status="available" onclick="setStatusFilter('available', this)">
+            ✓ Disponíveis <span class="pill-count">(<%= availableGifts %>)</span>
+          </button>
+        </div>
+
+        <!-- Filtro por Categoria -->
+        <div class="category-filter">
+          <select id="categoryFilter" onchange="filterGifts()">
+            <option value="all">Todos os ambientes</option>
+            <% categories.forEach(function(cat) { %>
+              <option value="<%= cat.toLowerCase() %>"><%= cat %></option>
+            <% }); %>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tabela Principal de Presentes -->
+    <section class="table-container">
+      <% if (gifts.length === 0) { %>
+        <div class="empty-state">
+          <div class="empty-icon">📦</div>
+          <h3>Nenhum presente cadastrado ainda</h3>
+          <p>Adicione manualmente ou importe uma planilha CSV com a lista de presentes.</p>
+          <button type="button" class="btn btn-primary" onclick="openModal('modalAddGift')">Adicionar primeiro presente</button>
+        </div>
+      <% } else { %>
+        <div class="table-wrapper">
+          <table class="gifts-table">
+            <thead>
+              <tr>
+                <th style="width: 32%;">Presente</th>
+                <th style="width: 18%;">Ambiente</th>
+                <th style="width: 32%;">Status & Quem escolheu</th>
+                <th style="width: 18%; text-align: right;">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="giftsTbody">
+              <% gifts.forEach(function (gift) { %>
+                <tr class="gift-row <%= gift.reserved_by ? 'row-reserved' : 'row-available' %>"
+                    data-name="<%= gift.name.toLowerCase() %>"
+                    data-guest="<%= (gift.reserved_by_name || '').toLowerCase() %>"
+                    data-category="<%= gift.category.toLowerCase() %>"
+                    data-status="<%= gift.reserved_by ? 'reserved' : 'available' %>">
+                  
+                  <!-- Nome do Presente -->
+                  <td>
+                    <div class="gift-title-cell">
+                      <span class="gift-bullet <%= gift.reserved_by ? 'bullet-reserved' : 'bullet-available' %>"></span>
+                      <span class="gift-name"><%= gift.name %></span>
+                    </div>
+                  </td>
+
+                  <!-- Categoria / Ambiente -->
+                  <td>
+                    <span class="category-tag"><%= gift.category %></span>
+                  </td>
+
+                  <!-- Status e Convidado -->
+                  <td>
+                    <% if (gift.reserved_by) { %>
+                      <div class="reserved-info">
+                        <span class="badge-status badge-reserved">🔒 Reservado</span>
+                        <div class="guest-pill" title="Presente escolhido por <%= gift.reserved_by_name %>">
+                          <span class="guest-avatar">👤</span>
+                          <span class="guest-name"><%= gift.reserved_by_name || 'Convidado' %></span>
+                        </div>
+                      </div>
+                    <% } else { %>
+                      <span class="badge-status badge-available">✓ Disponível</span>
+                    <% } %>
+                  </td>
+
+                  <!-- Ações -->
+                  <td style="text-align: right;">
+                    <div class="actions-cell">
+                      <% if (gift.reserved_by) { %>
+                        <form class="inline-form" method="POST" action="/admin/gifts/<%= gift.id %>/reset"
+                              onsubmit="return confirm('Deseja liberar este presente para outros convidados?')">
+                          <button type="submit" class="btn-action btn-reset" title="Liberar presente">
+                            ↺ Liberar
+                          </button>
+                        </form>
+                      <% } %>
+                      <form class="inline-form" method="POST" action="/admin/gifts/<%= gift.id %>/delete"
+                            onsubmit="return confirm('Tem certeza que deseja excluir o presente «<%= gift.name %>»?')">
+                        <button type="submit" class="btn-action btn-delete" title="Excluir presente">
+                          🗑️ Excluir
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="noResults" class="empty-filter-state" style="display: none;">
+          <p>🔍 Nenhum presente encontrado com os filtros selecionados.</p>
+          <button type="button" class="btn btn-sm" onclick="resetFilters()">Limpar filtros</button>
+        </div>
+      <% } %>
+    </section>
+
+  </main>
+
+  <!-- MODAL: Adicionar Presente -->
+  <div id="modalAddGift" class="modal-backdrop" onclick="handleBackdropClick(event, 'modalAddGift')">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>➕ Adicionar Presente</h2>
+        <button type="button" class="modal-close" onclick="closeModal('modalAddGift')">✕</button>
+      </div>
+      <form method="POST" action="/admin/gifts">
+        <label for="giftName">Nome do presente:</label>
+        <input id="giftName" name="name" type="text" placeholder="Ex: Jogo de panelas Tramontina" required autofocus>
+        
+        <label for="giftCategory">Ambiente:</label>
+        <select id="giftCategory" name="category">
+          <% categories.forEach(function(category) { %>
+            <option value="<%= category %>"><%= category %></option>
+          <% }); %>
+        </select>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modalAddGift')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Presente</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Importar CSV -->
+  <div id="modalImportCsv" class="modal-backdrop" onclick="handleBackdropClick(event, 'modalImportCsv')">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>📄 Importar Lista via CSV</h2>
+        <button type="button" class="modal-close" onclick="closeModal('modalImportCsv')">✕</button>
+      </div>
+      <p class="modal-desc">Envie um arquivo CSV com as colunas <strong>nome,categoria</strong>.</p>
+      
+      <form method="POST" action="/admin/gifts/import" enctype="multipart/form-data">
+        <label for="csvFileInput">Arquivo CSV:</label>
+        <input id="csvFileInput" name="csvFile" type="file" accept=".csv,text/csv" required>
+        
+        <div class="csv-example">
+          <small>Exemplo do conteúdo do arquivo CSV:</small>
+          <code>nome,categoria<br>Jogo de panelas,Cozinha<br>Jogo de toalhas,Banheiro<br>Edredom casal,Quarto</code>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modalImportCsv')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Importar Agora</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Alterar Senha -->
+  <div id="modalChangePassword" class="modal-backdrop" onclick="handleBackdropClick(event, 'modalChangePassword')">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>🔒 Alterar Senha de Administrador</h2>
+        <button type="button" class="modal-close" onclick="closeModal('modalChangePassword')">✕</button>
+      </div>
+      <form method="POST" action="/admin/change-password">
+        <label for="currentPassword">Senha atual:</label>
+        <input id="currentPassword" name="currentPassword" type="password" required autocomplete="current-password">
+
+        <label for="newPassword">Nova senha:</label>
+        <input id="newPassword" name="newPassword" type="password" required minlength="6" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+
+        <label for="confirmPassword">Confirmar nova senha:</label>
+        <input id="confirmPassword" name="confirmPassword" type="password" required minlength="6" placeholder="Repita a nova senha" autocomplete="new-password">
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modalChangePassword')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Atualizar Senha</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Script de Interatividade e Filtros Instantâneos -->
+  <script>
+    let currentStatus = 'all';
+
+    function openModal(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.classList.add('open');
+        const input = el.querySelector('input:not([type=file])');
+        if (input) setTimeout(() => input.focus(), 80);
+      }
+    }
+
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('open');
+    }
+
+    function handleBackdropClick(e, id) {
+      if (e.target.id === id) closeModal(id);
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.modal-backdrop.open').forEach(m => m.classList.remove('open'));
+      }
+    });
+
+    function setStatusFilter(status, btn) {
+      currentStatus = status;
+      document.querySelectorAll('.status-pills .pill').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      filterGifts();
+    }
+
+    function clearSearchInput() {
+      const input = document.getElementById('searchInput');
+      input.value = '';
+      document.getElementById('clearSearch').style.display = 'none';
+      filterGifts();
+      input.focus();
+    }
+
+    function resetFilters() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('categoryFilter').value = 'all';
+      setStatusFilter('all', document.querySelector('.status-pills .pill[data-status="all"]'));
+    }
+
+    function filterGifts() {
+      const searchVal = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+      const catVal = document.getElementById('categoryFilter').value;
+      const clearBtn = document.getElementById('clearSearch');
+      if (clearBtn) clearBtn.style.display = searchVal ? 'block' : 'none';
+
+      const rows = document.querySelectorAll('#giftsTbody .gift-row');
+      let visibleCount = 0;
+
+      rows.forEach(row => {
+        const name = row.getAttribute('data-name') || '';
+        const guest = row.getAttribute('data-guest') || '';
+        const category = row.getAttribute('data-category') || '';
+        const status = row.getAttribute('data-status') || '';
+
+        const matchesSearch = !searchVal || name.includes(searchVal) || guest.includes(searchVal);
+        const matchesCategory = (catVal === 'all') || (category === catVal);
+        const matchesStatus = (currentStatus === 'all') || (status === currentStatus);
+
+        if (matchesSearch && matchesCategory && matchesStatus) {
+          row.style.display = '';
+          visibleCount++;
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      const noResults = document.getElementById('noResults');
+      if (noResults) {
+        noResults.style.display = (visibleCount === 0 && rows.length > 0) ? 'block' : 'none';
+      }
+    }
+  </script>
+</body>
+</html>
