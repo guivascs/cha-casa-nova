@@ -15,7 +15,10 @@ input:focus, textarea:focus { outline: none; border-color: #665ed5; }
 button { padding: 11px 16px; border: 0; border-radius: 8px; background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
 form > button { width: 100%; margin-top: 21px; }
 button:hover { filter: brightness(.96); transform: translateY(-1px); }
+button:disabled { cursor: wait; opacity: .7; transform: none; }
 .error { margin: 15px 0; padding: 11px; border-left: 4px solid #c62828; border-radius: 6px; background: #ffeded; color: #b71c1c; }
+.message { display: none; margin: 0 0 20px; padding: 13px 15px; border-radius: 8px; font-weight: 600; }
+.message.error { background: #ffeded; color: #a51d1d; border-left: 4px solid #d63030; }
 .welcome { margin: 0 0 25px; color: #fff; font-size: 1.13rem; text-align: center; }
 .list-container { display: flex; flex-direction: column; gap: 14px; }
 .list-item { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 23px; border-radius: 12px; background: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.12); }
