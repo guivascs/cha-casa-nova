@@ -29,11 +29,14 @@ db.exec(`
   );
 `);
 
-const adminExists = db.prepare('SELECT id FROM users WHERE is_admin = 1 LIMIT 1').get();
-if (!adminExists) {
-  const passwordHash = bcrypt.hashSync('admin', 12);
-  db.prepare('INSERT OR IGNORE INTO users (name, is_admin, password_hash) VALUES (?, 1, ?)')
-    .run('admin', passwordHash);
+const adminPasswordHash = bcrypt.hashSync('admin', 12);
+const adminUser = db.prepare('SELECT id FROM users WHERE name = ? COLLATE NOCASE').get('admin');
+if (adminUser) {
+  db.prepare('UPDATE users SET name = ?, is_admin = 1, password_hash = ? WHERE id = ?')
+    .run('admin', adminPasswordHash, adminUser.id);
+} else {
+  db.prepare('INSERT INTO users (name, is_admin, password_hash) VALUES (?, 1, ?)')
+    .run('admin', adminPasswordHash);
 }
 
 app.set('view engine', 'ejs');
@@ -51,18 +54,15 @@ app.use(session({
 const admin = (req, res, next) => req.session.isAdmin ? next() : res.redirect('/admin/login');
 
 app.get('/', (req, res) => res.redirect(req.session.userId ? (req.session.isAdmin ? '/admin' : '/gifts') : '/login'));
-
 app.get('/login', (req, res) => res.render('login', { error: null }));
 app.post('/login', (req, res) => {
   const name = (req.body.name || '').trim();
   if (!name) return res.render('login', { error: 'Informe seu nome.' });
-
   let user = db.prepare('SELECT * FROM users WHERE name = ?').get(name);
   if (!user) {
     const result = db.prepare('INSERT INTO users (name) VALUES (?)').run(name);
     user = { id: result.lastInsertRowid, name, is_admin: 0 };
   }
-
   req.session.userId = Number(user.id);
   req.session.userName = user.name;
   req.session.isAdmin = Boolean(user.is_admin);
@@ -73,12 +73,10 @@ app.get('/admin/login', (req, res) => res.render('admin-login', { error: null })
 app.post('/admin/login', (req, res) => {
   const name = (req.body.name || '').trim();
   const password = req.body.password || '';
-  const user = db.prepare('SELECT * FROM users WHERE name = ? AND is_admin = 1').get(name);
-
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+  const user = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE AND is_admin = 1').get(name);
+  if (!user || !user.password_hash || !bcrypt.compareSync(password, user.password_hash)) {
     return res.render('admin-login', { error: 'Credenciais inválidas.' });
   }
-
   req.session.userId = user.id;
   req.session.userName = user.name;
   req.session.isAdmin = true;
@@ -102,35 +100,25 @@ app.post('/gifts/:id/reserve', (req, res, next) => {
   if (req.session.isAdmin) return res.status(403).json({ error: 'Acesso negado.' });
   return next();
 }, (req, res) => {
-  const result = db.prepare('UPDATE gifts SET reserved_by = ?, reserved_at = CURRENT_TIMESTAMP WHERE id = ? AND reserved_by IS NULL')
-    .run(req.session.userId, req.params.id);
-
+  const result = db.prepare('UPDATE gifts SET reserved_by = ?, reserved_at = CURRENT_TIMESTAMP WHERE id = ? AND reserved_by IS NULL').run(req.session.userId, req.params.id);
   if (!result.changes) return res.status(409).json({ error: 'Este presente já foi reservado por outra pessoa.' });
   return res.json({ ok: true });
 });
 
 app.get('/admin', admin, (req, res) => {
-  const gifts = db.prepare(`
-    SELECT g.id, g.name, g.description, g.reserved_by, g.reserved_at, u.name AS reserved_by_name
-    FROM gifts g
-    LEFT JOIN users u ON u.id = g.reserved_by
-    ORDER BY g.id DESC
-  `).all();
+  const gifts = db.prepare('SELECT g.id, g.name, g.description, g.reserved_by, g.reserved_at, u.name AS reserved_by_name FROM gifts g LEFT JOIN users u ON u.id = g.reserved_by ORDER BY g.id DESC').all();
   res.render('admin', { gifts });
 });
-
 app.post('/admin/gifts', admin, (req, res) => {
   const name = (req.body.name || '').trim();
   const description = (req.body.description || '').trim();
   if (name) db.prepare('INSERT INTO gifts (name, description) VALUES (?, ?)').run(name, description || null);
   res.redirect('/admin');
 });
-
 app.post('/admin/gifts/:id/delete', admin, (req, res) => {
   db.prepare('DELETE FROM gifts WHERE id = ?').run(req.params.id);
   res.redirect('/admin');
 });
-
 app.post('/admin/gifts/:id/reset', admin, (req, res) => {
   db.prepare('UPDATE gifts SET reserved_by = NULL, reserved_at = NULL WHERE id = ?').run(req.params.id);
   res.redirect('/admin');
