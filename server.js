@@ -1,31 +1,67 @@
 require('dotenv').config();
-const express=require('express');
-const session=require('express-session');
-const bcrypt=require('bcryptjs');
-const Database=require('better-sqlite3');
-const multer=require('multer');
-const path=require('path');
-const app=express();
-const db=new Database(path.join(__dirname,'cha-casa-nova.db'));
-const PORT=process.env.PORT||3000;
-const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:1024*1024}});
+const express = require('express');
+const session = require('express-session');
+const bcrypt = require('bcryptjs');
+const Database = require('better-sqlite3');
+const multer = require('multer');
+const path = require('path');
+
+const app = express();
+const db = new Database(path.join(__dirname, 'cha-casa-nova.db'));
+const PORT = process.env.PORT || 3000;
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 } });
+const CATEGORIES = ['Cozinha', 'Sala', 'Quarto', 'Banheiro', 'Escritório', 'Lavanderia', 'Outros'];
+
 db.pragma('foreign_keys = ON');
-db.exec(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE COLLATE NOCASE,is_admin INTEGER NOT NULL DEFAULT 0,password_hash TEXT);CREATE TABLE IF NOT EXISTS gifts (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,description TEXT,price REAL,image_url TEXT,reserved_by INTEGER UNIQUE,reserved_at TEXT,FOREIGN KEY(reserved_by) REFERENCES users(id));`);
-const hash=bcrypt.hashSync('admin',12);const adminUser=db.prepare('SELECT id FROM users WHERE name=? COLLATE NOCASE').get('admin');if(adminUser)db.prepare('UPDATE users SET name=?,is_admin=1,password_hash=? WHERE id=?').run('admin',hash,adminUser.id);else db.prepare('INSERT INTO users(name,is_admin,password_hash) VALUES(?,1,?)').run('admin',hash);
-app.set('view engine','ejs');app.set('views',path.join(__dirname,'views'));app.use(express.urlencoded({extended:true}));app.use(express.json());app.use(express.static(path.join(__dirname,'public')));app.use(session({secret:process.env.SESSION_SECRET||'troque-este-segredo-em-producao',resave:false,saveUninitialized:false,cookie:{httpOnly:true,sameSite:'lax'}}));
-const admin=(req,res,next)=>req.session.isAdmin?next():res.redirect('/admin/login');
-const getGifts=()=>db.prepare('SELECT g.id,g.name,g.reserved_by,g.reserved_at,u.name reserved_by_name FROM gifts g LEFT JOIN users u ON u.id=g.reserved_by ORDER BY g.id DESC').all();
-function csvNames(content){const lines=content.replace(/^\uFEFF/,'').split(/\r?\n/);const names=[];for(let i=0;i<lines.length;i++){const line=lines[i].trim();if(!line)continue;const name=line.split(/[;,]/)[0].trim().replace(/^"|"$/g,'');if(i===0&&name.toLowerCase()==='nome')continue;if(name)names.push(name);}return [...new Set(names.map(name=>name.toLocaleLowerCase('pt-BR')))];}
-app.get('/',(req,res)=>res.redirect(req.session.userId?(req.session.isAdmin?'/admin':'/gifts'):'/login'));
-app.get('/login',(req,res)=>res.render('login',{error:null}));
-app.post('/login',(req,res)=>{const name=(req.body.name||'').trim();if(!name)return res.render('login',{error:'Informe seu nome.'});let user=db.prepare('SELECT * FROM users WHERE name=?').get(name);if(!user){const r=db.prepare('INSERT INTO users(name) VALUES(?)').run(name);user={id:r.lastInsertRowid,name,is_admin:0};}req.session.userId=Number(user.id);req.session.userName=user.name;req.session.isAdmin=Boolean(user.is_admin);res.redirect(user.is_admin?'/admin':'/gifts');});
-app.get('/admin/login',(req,res)=>res.render('admin-login',{error:null}));
-app.post('/admin/login',(req,res)=>{const name=(req.body.name||'').trim(),password=req.body.password||'';const user=db.prepare('SELECT * FROM users WHERE name=? COLLATE NOCASE AND is_admin=1').get(name);if(!user||!user.password_hash||!bcrypt.compareSync(password,user.password_hash))return res.render('admin-login',{error:'Credenciais inválidas.'});req.session.userId=user.id;req.session.userName=user.name;req.session.isAdmin=true;res.redirect('/admin');});
-app.get('/logout',(req,res)=>req.session.destroy(()=>res.redirect('/login')));app.get('/admin/gifts',(req,res)=>res.redirect('/admin'));
-app.get('/gifts',(req,res,next)=>{if(!req.session.userId)return res.redirect('/login');if(req.session.isAdmin)return res.redirect('/admin');next();},(req,res)=>res.render('gifts',{gifts:db.prepare('SELECT id,name,reserved_by FROM gifts ORDER BY id DESC').all(),userName:req.session.userName}));
-app.post('/gifts/:id/reserve',(req,res,next)=>{if(!req.session.userId)return res.status(401).json({error:'Faça login antes de escolher um presente.'});if(req.session.isAdmin)return res.status(403).json({error:'O administrador não pode reservar presentes. Saia e entre usando um nome de convidado.'});next();},(req,res)=>{const r=db.prepare('UPDATE gifts SET reserved_by=?,reserved_at=CURRENT_TIMESTAMP WHERE id=? AND reserved_by IS NULL').run(req.session.userId,req.params.id);if(!r.changes)return res.status(409).json({error:'Este presente já foi reservado por outra pessoa.'});res.json({ok:true});});
-app.get('/admin',admin,(req,res)=>{res.render('admin',{gifts:getGifts(),importResult:req.session.importResult||null});delete req.session.importResult;});
-app.post('/admin/gifts',admin,(req,res)=>{const name=(req.body.name||'').trim();if(name)db.prepare('INSERT INTO gifts(name) VALUES(?)').run(name);res.redirect('/admin');});
-app.post('/admin/gifts/import',admin,upload.single('csvFile'),(req,res)=>{if(!req.file){req.session.importResult={type:'error',text:'Selecione um arquivo CSV para importar.'};return res.redirect('/admin');}if(!req.file.originalname.toLowerCase().endsWith('.csv')){req.session.importResult={type:'error',text:'O arquivo deve ter extensão .csv.'};return res.redirect('/admin');}const names=csvNames(req.file.buffer.toString('utf8'));let added=0,skipped=0;const insert=db.prepare('INSERT OR IGNORE INTO gifts(name) VALUES(?)');const transaction=db.transaction(()=>{for(const normalizedName of names){const displayName=normalizedName.replace(/(^|\s)\S/g,letter=>letter.toUpperCase());const result=insert.run(displayName);if(result.changes)added++;else skipped++;}});transaction();req.session.importResult={type:'success',text:`Importação concluída: ${added} presente(s) adicionado(s) e ${skipped} ignorado(s).`};res.redirect('/admin');});
-app.post('/admin/gifts/:id/delete',admin,(req,res)=>{db.prepare('DELETE FROM gifts WHERE id=?').run(req.params.id);res.redirect('/admin');});app.post('/admin/gifts/:id/reset',admin,(req,res)=>{db.prepare('UPDATE gifts SET reserved_by=NULL,reserved_at=NULL WHERE id=?').run(req.params.id);res.redirect('/admin');});
-app.listen(PORT,()=>console.log(`Servidor rodando em http://localhost:${PORT}`));
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    password_hash TEXT
+  );
+  CREATE TABLE IF NOT EXISTS gifts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    price REAL,
+    image_url TEXT,
+    reserved_by INTEGER UNIQUE,
+    reserved_at TEXT,
+    FOREIGN KEY (reserved_by) REFERENCES users(id)
+  );
+`);
+const giftColumns = db.prepare('PRAGMA table_info(gifts)').all();
+if (!giftColumns.some(column => column.name === 'category')) db.exec("ALTER TABLE gifts ADD COLUMN category TEXT NOT NULL DEFAULT 'Outros'");
+db.prepare("UPDATE gifts SET category = 'Outros' WHERE category IS NULL OR TRIM(category) = ''").run();
+
+const adminHash = bcrypt.hashSync('admin', 12);
+const adminUser = db.prepare('SELECT id FROM users WHERE name = ? COLLATE NOCASE').get('admin');
+if (adminUser) db.prepare('UPDATE users SET name = ?, is_admin = 1, password_hash = ? WHERE id = ?').run('admin', adminHash, adminUser.id);
+else db.prepare('INSERT INTO users (name, is_admin, password_hash) VALUES (?, 1, ?)').run('admin', adminHash);
+
+app.set('view engine', 'ejs'); app.set('views', path.join(__dirname, 'views'));
+app.use(express.urlencoded({ extended: true })); app.use(express.json()); app.use(express.static(path.join(__dirname, 'public')));
+app.use(session({ secret: process.env.SESSION_SECRET || 'troque-este-segredo-em-producao', resave: false, saveUninitialized: false, cookie: { httpOnly: true, sameSite: 'lax' } }));
+
+const admin = (req, res, next) => req.session.isAdmin ? next() : res.redirect('/admin/login');
+const validCategory = value => CATEGORIES.includes(value) ? value : 'Outros';
+const getGifts = () => db.prepare('SELECT g.id,g.name,g.category,g.reserved_by,g.reserved_at,u.name reserved_by_name FROM gifts g LEFT JOIN users u ON u.id=g.reserved_by ORDER BY g.category,g.name').all();
+function csvGifts(content) { const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/); const results = []; for (let i = 0; i < lines.length; i += 1) { const line = lines[i].trim(); if (!line) continue; const columns = line.split(/[;,]/).map(value => value.trim().replace(/^"|"$/g, '')); if (i === 0 && columns[0].toLowerCase() === 'nome') continue; if (columns[0]) results.push({ name: columns[0], category: validCategory(columns[1] || 'Outros') }); } const unique = new Map(); for (const gift of results) unique.set(`${gift.name.toLocaleLowerCase('pt-BR')}|${gift.category}`, gift); return [...unique.values()]; }
+
+app.get('/', (req, res) => res.redirect(req.session.userId ? (req.session.isAdmin ? '/admin' : '/gifts') : '/login'));
+app.get('/login', (req, res) => res.render('login', { error: null }));
+app.post('/login', (req, res) => { const name = (req.body.name || '').trim(); if (!name) return res.render('login', { error: 'Informe seu nome.' }); let user = db.prepare('SELECT * FROM users WHERE name = ?').get(name); if (!user) { const result = db.prepare('INSERT INTO users(name) VALUES(?)').run(name); user = { id: result.lastInsertRowid, name, is_admin: 0 }; } req.session.userId = Number(user.id); req.session.userName = user.name; req.session.isAdmin = Boolean(user.is_admin); res.redirect(user.is_admin ? '/admin' : '/gifts'); });
+app.get('/admin/login', (req, res) => res.render('admin-login', { error: null }));
+app.post('/admin/login', (req, res) => { const name = (req.body.name || '').trim(); const password = req.body.password || ''; const user = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE AND is_admin = 1').get(name); if (!user || !user.password_hash || !bcrypt.compareSync(password, user.password_hash)) return res.render('admin-login', { error: 'Credenciais inválidas.' }); req.session.userId = user.id; req.session.userName = user.name; req.session.isAdmin = true; res.redirect('/admin'); });
+app.get('/logout', (req, res) => req.session.destroy(() => res.redirect('/login'))); app.get('/admin/gifts', (req, res) => res.redirect('/admin'));
+
+app.get('/gifts', (req, res, next) => { if (!req.session.userId) return res.redirect('/login'); if (req.session.isAdmin) return res.redirect('/admin'); next(); }, (req, res) => { const gifts = db.prepare('SELECT id,name,category,reserved_by FROM gifts ORDER BY category,name').all(); const groups = CATEGORIES.map(category => ({ category, gifts: gifts.filter(gift => gift.category === category) })).filter(group => group.gifts.length); res.render('gifts', { groups, userName: req.session.userName }); });
+app.post('/gifts/:id/reserve', (req, res, next) => { if (!req.session.userId) return res.status(401).json({ error: 'Faça login antes de escolher um presente.' }); if (req.session.isAdmin) return res.status(403).json({ error: 'O administrador não pode reservar presentes. Saia e entre usando um nome de convidado.' }); next(); }, (req, res) => { const result = db.prepare('UPDATE gifts SET reserved_by = ?, reserved_at = CURRENT_TIMESTAMP WHERE id = ? AND reserved_by IS NULL').run(req.session.userId, req.params.id); if (!result.changes) return res.status(409).json({ error: 'Este presente já foi reservado por outra pessoa.' }); res.json({ ok: true }); });
+
+app.get('/admin', admin, (req, res) => { res.render('admin', { gifts: getGifts(), categories: CATEGORIES, importResult: req.session.importResult || null }); delete req.session.importResult; });
+app.post('/admin/gifts', admin, (req, res) => { const name = (req.body.name || '').trim(); const category = validCategory(req.body.category); if (name) db.prepare('INSERT INTO gifts(name,category) VALUES(?,?)').run(name, category); res.redirect('/admin'); });
+app.post('/admin/gifts/import', admin, upload.single('csvFile'), (req, res) => { if (!req.file) { req.session.importResult = { type: 'error', text: 'Selecione um arquivo CSV para importar.' }; return res.redirect('/admin'); } if (!req.file.originalname.toLowerCase().endsWith('.csv')) { req.session.importResult = { type: 'error', text: 'O arquivo deve ter extensão .csv.' }; return res.redirect('/admin'); } const gifts = csvGifts(req.file.buffer.toString('utf8')); let added = 0; let skipped = 0; const exists = db.prepare('SELECT 1 FROM gifts WHERE name = ? COLLATE NOCASE AND category = ?'); const insert = db.prepare('INSERT INTO gifts(name,category) VALUES(?,?)'); db.transaction(() => { for (const gift of gifts) { if (exists.get(gift.name, gift.category)) skipped += 1; else { insert.run(gift.name, gift.category); added += 1; } } })(); req.session.importResult = { type: 'success', text: `Importação concluída: ${added} presente(s) adicionado(s) e ${skipped} ignorado(s).` }; res.redirect('/admin'); });
+app.post('/admin/gifts/:id/delete', admin, (req, res) => { db.prepare('DELETE FROM gifts WHERE id = ?').run(req.params.id); res.redirect('/admin'); });
+app.post('/admin/gifts/:id/reset', admin, (req, res) => { db.prepare('UPDATE gifts SET reserved_by = NULL, reserved_at = NULL WHERE id = ?').run(req.params.id); res.redirect('/admin'); });
+app.listen(PORT, () => console.log(`Servidor rodando em http://localhost:${PORT}`));

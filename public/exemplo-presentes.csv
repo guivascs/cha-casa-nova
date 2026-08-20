@@ -1,6 +1,10 @@
-nome
-Jogo de panelas
-Liquidificador
-Cafeteira
-Jogo de pratos
-Kit de toalhas
+nome,categoria
+Jogo de panelas,Cozinha
+Liquidificador,Cozinha
+Cafeteira,Cozinha
+Sofá,Sala
+Tapete para sala,Sala
+Jogo de cama,Quarto
+Kit de toalhas,Banheiro
+Mesa de escritório,Escritório
+Cesto de roupas,Lavanderia
