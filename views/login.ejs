@@ -3,20 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chá de Casa Nova - Login</title>
+  <title>Chá de Casa Nova do Gui - Login</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <main class="card">
-    <h1>🏠 Chá de Casa Nova</h1>
-    <p>Informe seu nome para ver a lista de presentes.</p>
-    <% if (error) { %><div class="error"><%= error %></div><% } %>
+  <main class="card login-card">
+    <div class="login-avatar-wrapper">
+      <img src="/avatar.png" alt="Gui" class="login-avatar">
+    </div>
+    <h1>🏠 Chá de Casa Nova do Gui</h1>
+    <p>Informe seu nome para ver a lista de presentes e escolher o seu.</p>
+    <% if (error) { %>
+      <div class="error"><%= error %></div>
+    <% } %>
     <form method="POST" action="/login">
       <label for="name">Seu nome:</label>
-      <input id="name" name="name" type="text" placeholder="Ex: Maria Silva" required maxlength="80" autofocus>
-      <button type="submit">Continuar</button>
+      <input id="name" name="name" type="text" placeholder="Ex: Maria Silva" required maxlength="80" autofocus autocomplete="name">
+      <button type="submit">Entrar na Lista</button>
     </form>
-    <a href="/admin/login">Área administrativa</a>
+    <a href="/admin/login" class="admin-link">Área administrativa</a>
   </main>
 </body>
 </html>

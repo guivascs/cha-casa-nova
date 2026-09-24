@@ -26,7 +26,7 @@ db.exec(`
     description TEXT,
     price REAL,
     image_url TEXT,
-    reserved_by INTEGER UNIQUE,
+    reserved_by INTEGER,
     reserved_at TEXT,
     FOREIGN KEY (reserved_by) REFERENCES users(id)
   );
@@ -34,6 +34,30 @@ db.exec(`
 const giftColumns = db.prepare('PRAGMA table_info(gifts)').all();
 if (!giftColumns.some(column => column.name === 'category')) db.exec("ALTER TABLE gifts ADD COLUMN category TEXT NOT NULL DEFAULT 'Outros'");
 db.prepare("UPDATE gifts SET category = 'Outros' WHERE category IS NULL OR TRIM(category) = ''").run();
+
+// Auto-migration: Remove UNIQUE constraint on reserved_by if present from previous version
+const giftsTableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='gifts'").get()?.sql || '';
+if (giftsTableSql.includes('reserved_by INTEGER UNIQUE') || giftsTableSql.includes('reserved_by INT UNIQUE')) {
+  db.exec(`
+    PRAGMA foreign_keys = OFF;
+    CREATE TABLE gifts_temp (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      price REAL,
+      image_url TEXT,
+      reserved_by INTEGER,
+      reserved_at TEXT,
+      category TEXT NOT NULL DEFAULT 'Outros',
+      FOREIGN KEY (reserved_by) REFERENCES users(id)
+    );
+    INSERT INTO gifts_temp (id, name, description, price, image_url, reserved_by, reserved_at, category)
+      SELECT id, name, description, price, image_url, reserved_by, reserved_at, category FROM gifts;
+    DROP TABLE gifts;
+    ALTER TABLE gifts_temp RENAME TO gifts;
+    PRAGMA foreign_keys = ON;
+  `);
+}
 
 // Initialize or update admin credentials
 const envAdminName = (process.env.ADMIN_USERNAME || 'admin').trim();
@@ -66,8 +90,14 @@ app.get('/admin/login', (req, res) => res.render('admin-login', { error: null })
 app.post('/admin/login', (req, res) => { const name = (req.body.name || '').trim(); const password = req.body.password || ''; const user = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE AND is_admin = 1').get(name); if (!user || !user.password_hash || !bcrypt.compareSync(password, user.password_hash)) return res.render('admin-login', { error: 'Credenciais inválidas.' }); req.session.userId = user.id; req.session.userName = user.name; req.session.isAdmin = true; res.redirect('/admin'); });
 app.get('/logout', (req, res) => req.session.destroy(() => res.redirect('/login'))); app.get('/admin/gifts', (req, res) => res.redirect('/admin'));
 
-app.get('/gifts', (req, res, next) => { if (!req.session.userId) return res.redirect('/login'); if (req.session.isAdmin) return res.redirect('/admin'); next(); }, (req, res) => { const gifts = db.prepare('SELECT id,name,category,reserved_by FROM gifts ORDER BY category,name').all(); const groups = CATEGORIES.map(category => ({ category, gifts: gifts.filter(gift => gift.category === category) })).filter(group => group.gifts.length); res.render('gifts', { groups, userName: req.session.userName }); });
+app.get('/gifts', (req, res, next) => { if (!req.session.userId) return res.redirect('/login'); if (req.session.isAdmin) return res.redirect('/admin'); next(); }, (req, res) => {
+  const gifts = db.prepare('SELECT id,name,category,reserved_by FROM gifts ORDER BY category,name').all();
+  const myGifts = gifts.filter(gift => gift.reserved_by === req.session.userId);
+  const groups = CATEGORIES.map(category => ({ category, gifts: gifts.filter(gift => gift.category === category) })).filter(group => group.gifts.length);
+  res.render('gifts', { groups, myGifts, userId: req.session.userId, userName: req.session.userName });
+});
 app.post('/gifts/:id/reserve', (req, res, next) => { if (!req.session.userId) return res.status(401).json({ error: 'Faça login antes de escolher um presente.' }); if (req.session.isAdmin) return res.status(403).json({ error: 'O administrador não pode reservar presentes. Saia e entre usando um nome de convidado.' }); next(); }, (req, res) => { const result = db.prepare('UPDATE gifts SET reserved_by = ?, reserved_at = CURRENT_TIMESTAMP WHERE id = ? AND reserved_by IS NULL').run(req.session.userId, req.params.id); if (!result.changes) return res.status(409).json({ error: 'Este presente já foi reservado por outra pessoa.' }); res.json({ ok: true }); });
+app.post('/gifts/:id/unreserve', (req, res, next) => { if (!req.session.userId) return res.status(401).json({ error: 'Faça login primeiro.' }); next(); }, (req, res) => { const result = db.prepare('UPDATE gifts SET reserved_by = NULL, reserved_at = NULL WHERE id = ? AND reserved_by = ?').run(req.params.id, req.session.userId); if (!result.changes) return res.status(400).json({ error: 'Este presente não foi reservado por você.' }); res.json({ ok: true }); });
 
 app.get('/admin', admin, (req, res) => { res.render('admin', { gifts: getGifts(), categories: CATEGORIES, importResult: req.session.importResult || null, passwordResult: req.session.passwordResult || null }); delete req.session.importResult; delete req.session.passwordResult; });
 app.post('/admin/change-password', admin, (req, res) => {
@@ -100,4 +130,10 @@ app.post('/admin/gifts', admin, (req, res) => { const name = (req.body.name || '
 app.post('/admin/gifts/import', admin, upload.single('csvFile'), (req, res) => { if (!req.file) { req.session.importResult = { type: 'error', text: 'Selecione um arquivo CSV para importar.' }; return res.redirect('/admin'); } if (!req.file.originalname.toLowerCase().endsWith('.csv')) { req.session.importResult = { type: 'error', text: 'O arquivo deve ter extensão .csv.' }; return res.redirect('/admin'); } const gifts = csvGifts(req.file.buffer.toString('utf8')); let added = 0; let skipped = 0; const exists = db.prepare('SELECT 1 FROM gifts WHERE name = ? COLLATE NOCASE AND category = ?'); const insert = db.prepare('INSERT INTO gifts(name,category) VALUES(?,?)'); db.transaction(() => { for (const gift of gifts) { if (exists.get(gift.name, gift.category)) skipped += 1; else { insert.run(gift.name, gift.category); added += 1; } } })(); req.session.importResult = { type: 'success', text: `Importação concluída: ${added} presente(s) adicionado(s) e ${skipped} ignorado(s).` }; res.redirect('/admin'); });
 app.post('/admin/gifts/:id/delete', admin, (req, res) => { db.prepare('DELETE FROM gifts WHERE id = ?').run(req.params.id); res.redirect('/admin'); });
 app.post('/admin/gifts/:id/reset', admin, (req, res) => { db.prepare('UPDATE gifts SET reserved_by = NULL, reserved_at = NULL WHERE id = ?').run(req.params.id); res.redirect('/admin'); });
+app.post('/admin/gifts/clear-all', admin, (req, res) => {
+  const result = db.prepare('DELETE FROM gifts').run();
+  try { db.prepare("DELETE FROM sqlite_sequence WHERE name = 'gifts'").run(); } catch (e) {}
+  req.session.importResult = { type: 'success', text: `Todos os presentes (${result.changes}) foram removidos com sucesso.` };
+  res.redirect('/admin');
+});
 app.listen(PORT, () => console.log(`Servidor rodando em http://localhost:${PORT}`));

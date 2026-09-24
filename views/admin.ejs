@@ -24,6 +24,11 @@
       <button type="button" class="btn btn-secondary" onclick="openModal('modalImportCsv')">
         <span>📄</span> Importar CSV
       </button>
+      <% if (gifts.length > 0) { %>
+        <button type="button" class="btn btn-secondary btn-outline-danger" onclick="openModal('modalClearAll')">
+          <span>🗑️</span> Limpar Lista
+        </button>
+      <% } %>
       <button type="button" class="btn btn-secondary" onclick="openModal('modalChangePassword')">
         <span>🔒</span> Senha
       </button>
@@ -281,6 +286,27 @@
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick="closeModal('modalChangePassword')">Cancelar</button>
           <button type="submit" class="btn btn-primary">Atualizar Senha</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Limpar Todos os Presentes -->
+  <div id="modalClearAll" class="modal-backdrop" onclick="handleBackdropClick(event, 'modalClearAll')">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>⚠️ Limpar Todos os Presentes</h2>
+        <button type="button" class="modal-close" onclick="closeModal('modalClearAll')">✕</button>
+      </div>
+      <p class="modal-desc" style="color: var(--red-text); font-size: 0.95rem; line-height: 1.5;">
+        Tem certeza que deseja apagar <strong>TODOS</strong> os <%= gifts.length %> presentes cadastrados?
+        <br><br>
+        Esta ação removerá todos os itens e todas as reservas feitas pelos convidados. <strong>Esta ação não pode ser desfeita.</strong>
+      </p>
+      <form method="POST" action="/admin/gifts/clear-all">
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modalClearAll')">Cancelar</button>
+          <button type="submit" class="btn btn-danger-solid">Sim, apagar tudo</button>
         </div>
       </form>
     </div>
