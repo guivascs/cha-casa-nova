@@ -8,16 +8,17 @@
 </head>
 <body>
   <main class="card">
-    <h1>🔐 Administração</h1>
+    <h1>👾 MODO ADMIN</h1>
+    <p>ÁREA RESTRITA DO MESTRE DO JOGO</p>
     <% if (error) { %><div class="error"><%= error %></div><% } %>
     <form method="POST" action="/admin/login">
-      <label for="name">Usuário:</label>
+      <label for="name">USUÁRIO:</label>
       <input id="name" name="name" type="text" required autocomplete="username" autofocus>
-      <label for="password">Senha:</label>
+      <label for="password">SENHA:</label>
       <input id="password" name="password" type="password" required autocomplete="current-password">
-      <button type="submit">Entrar</button>
+      <button type="submit">DESBLOQUEAR 🔑</button>
     </form>
-    <a href="/login">← Voltar</a>
+    <a href="/login">← VOLTAR AO JOGO</a>
   </main>
 </body>
 </html>

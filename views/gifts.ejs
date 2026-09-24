@@ -11,17 +11,17 @@
     <div class="header-brand">
       <img src="/avatar.png" alt="Gui" class="header-avatar">
       <div>
-        <h1>Chá de Casa Nova do Gui</h1>
-        <p class="header-subtitle">Escolha um ou mais presentes para a minha casa nova!</p>
+        <h1>🎮 CHÁ DE CASA NOVA DO GUI</h1>
+        <p class="header-subtitle">MISSÃO: ESCOLHA ITENS PARA COMPLETAR O NOVO CASTELO!</p>
       </div>
     </div>
-    <a href="/logout" class="btn btn-outline-danger">Sair</a>
+    <a href="/logout" class="btn btn-outline-danger">Sair [ESC]</a>
   </header>
 
   <main class="guest-container">
     <div class="welcome-box">
-      <h2>Olá, <strong><%= userName %></strong>! 👋</h2>
-      <p>Obrigado por fazer parte desse momento tão especial comigo! Você pode escolher <strong>quantos presentes quiser</strong> da lista abaixo.</p>
+      <h2>BEM-VINDO, PLAYER <strong><%= userName %></strong>! 👾</h2>
+      <p>Obrigado por jogar junto comigo nesta nova fase! Escolha quantos itens quiser da lista de itens abaixo.</p>
     </div>
 
     <div id="message" class="message" role="alert"></div>
@@ -30,8 +30,8 @@
     <% if (myGifts && myGifts.length > 0) { %>
       <section class="my-gifts-card">
         <div class="my-gifts-header">
-          <h3>🎉 Seus presentes escolhidos (<%= myGifts.length %>)</h3>
-          <span class="my-gifts-subtitle">Muito obrigado pelo carinho!</span>
+          <h3>🎒 SEU INVENTÁRIO (<%= myGifts.length %> ITENS)</h3>
+          <span class="my-gifts-subtitle">⭐ OBRIGADO PELO CARINHO!</span>
         </div>
         <div class="my-gifts-list">
           <% myGifts.forEach(function (gift) { %>
@@ -72,20 +72,20 @@
               <div class="item-details">
                 <h3><%= gift.name %></h3>
                 <% if (isMine) { %>
-                  <span class="badge-status badge-mine">✓ Escolhido por você</span>
+                  <span class="badge-status badge-mine">★ COLETADO POR VOCÊ</span>
                 <% } %>
               </div>
 
               <div class="list-action">
                 <% if (isMine) { %>
                   <button type="button" class="btn-unreserve" onclick='unreserve(<%= gift.id %>, <%- JSON.stringify(gift.name) %>, this)'>
-                    Desistir
+                    Largar item
                   </button>
                 <% } else if (isReservedByOther) { %>
-                  <span class="badge reserved">🔒 Já reservado</span>
+                  <span class="badge reserved">🔒 JÁ COLETADO</span>
                 <% } else { %>
                   <button type="button" class="btn-choose" onclick='reserve(<%= gift.id %>, <%- JSON.stringify(gift.name) %>, this)'>
-                    Escolher presente
+                    + COLETAR ITEM
                   </button>
                 <% } %>
               </div>

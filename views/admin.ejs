@@ -11,28 +11,28 @@
   <!-- Header Superior -->
   <header class="admin-header">
     <div class="header-brand">
-      <span class="brand-icon">🏡</span>
+      <span class="brand-icon">🏰</span>
       <div>
-        <h1>Painel do Chá de Casa Nova</h1>
-        <p class="header-subtitle">Gerencie os presentes e acompanhe quem já escolheu</p>
+        <h1>PAINEL DO MESTRE [ADMIN]</h1>
+        <p class="header-subtitle">GERENCIADOR DE LOOT & QUESTS DO CHÁ DE CASA NOVA</p>
       </div>
     </div>
     <div class="header-actions">
       <button type="button" class="btn btn-primary" onclick="openModal('modalAddGift')">
-        <span>➕</span> Adicionar Presente
+        <span>➕</span> NOVO ITEM
       </button>
       <button type="button" class="btn btn-secondary" onclick="openModal('modalImportCsv')">
-        <span>📄</span> Importar CSV
+        <span>📜</span> IMPORTAR CSV
       </button>
       <% if (gifts.length > 0) { %>
         <button type="button" class="btn btn-secondary btn-outline-danger" onclick="openModal('modalClearAll')">
-          <span>🗑️</span> Limpar Lista
+          <span>💥</span> RESET TOTAL
         </button>
       <% } %>
       <button type="button" class="btn btn-secondary" onclick="openModal('modalChangePassword')">
-        <span>🔒</span> Senha
+        <span>🔑</span> SENHA
       </button>
-      <a href="/logout" class="btn btn-outline-danger">Sair</a>
+      <a href="/logout" class="btn btn-outline-danger">SAIR [ESC]</a>
     </div>
   </header>
 
