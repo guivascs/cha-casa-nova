@@ -63,20 +63,40 @@ if (giftsTableSql.includes('reserved_by INTEGER UNIQUE') || giftsTableSql.includ
 const envAdminName = (process.env.ADMIN_USERNAME || 'admin').trim();
 const envAdminPassword = process.env.ADMIN_PASSWORD;
 
-const existingAdmin = db.prepare('SELECT id, name, password_hash FROM users WHERE is_admin = 1 LIMIT 1').get();
+// Procura se já existe um usuário com o nome de ADMIN_USERNAME (ex: admin)
+let adminUser = db.prepare('SELECT id, name, is_admin, password_hash FROM users WHERE name = ? COLLATE NOCASE').get(envAdminName);
 
-if (!existingAdmin) {
+if (!adminUser) {
+  // Se não existir o usuário 'admin', cria um novo
   const defaultPass = envAdminPassword || 'admin';
   const initialHash = bcrypt.hashSync(defaultPass, 12);
-  db.prepare('INSERT INTO users (name, is_admin, password_hash) VALUES (?, 1, ?)').run(envAdminName, initialHash);
-} else if (envAdminPassword) {
-  const hash = bcrypt.hashSync(envAdminPassword, 12);
-  db.prepare('UPDATE users SET name = ?, password_hash = ? WHERE id = ?').run(envAdminName, hash, existingAdmin.id);
+  const info = db.prepare('INSERT INTO users (name, is_admin, password_hash) VALUES (?, 1, ?)').run(envAdminName, initialHash);
+  adminUser = { id: info.lastInsertRowid };
+} else {
+  // Se já existir, garante que ele seja admin
+  db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(adminUser.id);
+  if (envAdminPassword) {
+    const hash = bcrypt.hashSync(envAdminPassword, 12);
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, adminUser.id);
+  }
 }
 
+// Garante que qualquer outro usuário que não seja o adminUser atual seja apenas convidado normal (is_admin = 0)
+db.prepare('UPDATE users SET is_admin = 0 WHERE id != ?').run(adminUser.id);
+
+app.set('trust proxy', 1);
 app.set('view engine', 'ejs'); app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true })); app.use(express.json()); app.use(express.static(path.join(__dirname, 'public')));
-app.use(session({ secret: process.env.SESSION_SECRET || 'troque-este-segredo-em-producao', resave: false, saveUninitialized: false, cookie: { httpOnly: true, sameSite: 'lax' } }));
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'troque-este-segredo-em-producao',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: 'auto'
+  }
+}));
 
 const admin = (req, res, next) => req.session.isAdmin ? next() : res.redirect('/admin/login');
 const validCategory = value => CATEGORIES.includes(value) ? value : 'Outros';
@@ -85,9 +105,42 @@ function csvGifts(content) { const lines = content.replace(/^\uFEFF/, '').split(
 
 app.get('/', (req, res) => res.redirect(req.session.userId ? (req.session.isAdmin ? '/admin' : '/gifts') : '/login'));
 app.get('/login', (req, res) => res.render('login', { error: null }));
-app.post('/login', (req, res) => { const name = (req.body.name || '').trim(); if (!name) return res.render('login', { error: 'Informe seu nome.' }); let user = db.prepare('SELECT * FROM users WHERE name = ?').get(name); if (!user) { const result = db.prepare('INSERT INTO users(name) VALUES(?)').run(name); user = { id: result.lastInsertRowid, name, is_admin: 0 }; } req.session.userId = Number(user.id); req.session.userName = user.name; req.session.isAdmin = Boolean(user.is_admin); res.redirect(user.is_admin ? '/admin' : '/gifts'); });
+app.post('/login', (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (!name) return res.render('login', { error: 'Informe seu nome.' });
+
+  let user = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE').get(name);
+
+  // Se for uma conta de administrador, não permite entrar sem senha
+  if (user && user.is_admin) {
+    return res.render('login', { 
+      error: 'Este nome pertence ao administrador. Para acessar a administração, use a Área Administrativa com sua senha.' 
+    });
+  }
+
+  if (!user) {
+    const result = db.prepare('INSERT INTO users(name, is_admin) VALUES(?, 0)').run(name);
+    user = { id: result.lastInsertRowid, name, is_admin: 0 };
+  }
+
+  req.session.userId = Number(user.id);
+  req.session.userName = user.name;
+  req.session.isAdmin = false;
+  res.redirect('/gifts');
+});
 app.get('/admin/login', (req, res) => res.render('admin-login', { error: null }));
-app.post('/admin/login', (req, res) => { const name = (req.body.name || '').trim(); const password = req.body.password || ''; const user = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE AND is_admin = 1').get(name); if (!user || !user.password_hash || !bcrypt.compareSync(password, user.password_hash)) return res.render('admin-login', { error: 'Credenciais inválidas.' }); req.session.userId = user.id; req.session.userName = user.name; req.session.isAdmin = true; res.redirect('/admin'); });
+app.post('/admin/login', (req, res) => {
+  const name = (req.body.name || '').trim();
+  const password = req.body.password || '';
+  const user = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE AND is_admin = 1').get(name);
+  if (!user || !user.password_hash || !bcrypt.compareSync(password, user.password_hash)) {
+    return res.render('admin-login', { error: 'Credenciais inválidas.' });
+  }
+  req.session.userId = user.id;
+  req.session.userName = user.name;
+  req.session.isAdmin = true;
+  res.redirect('/admin');
+});
 app.get('/logout', (req, res) => req.session.destroy(() => res.redirect('/login'))); app.get('/admin/gifts', (req, res) => res.redirect('/admin'));
 
 app.get('/gifts', (req, res, next) => { if (!req.session.userId) return res.redirect('/login'); if (req.session.isAdmin) return res.redirect('/admin'); next(); }, (req, res) => {
