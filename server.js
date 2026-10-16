@@ -109,22 +109,27 @@ app.post('/login', (req, res) => {
   const name = (req.body.name || '').trim();
   if (!name) return res.render('login', { error: 'Informe seu nome.' });
 
-  let user = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE').get(name);
+  const user = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE').get(name);
 
-  // Se for uma conta de administrador, não permite entrar sem senha
+  // Se o nome já pertence ao administrador
   if (user && user.is_admin) {
     return res.render('login', {
       error: 'Este nome pertence ao administrador. Para acessar a administração, use a Área Administrativa com sua senha.'
     });
   }
 
-  if (!user) {
-    const result = db.prepare('INSERT INTO users(name, is_admin) VALUES(?, 0)').run(name);
-    user = { id: result.lastInsertRowid, name, is_admin: 0 };
+  // Se o nome já foi cadastrado por outro convidado
+  if (user) {
+    return res.render('login', {
+      error: 'Este nome já foi utilizado por outra pessoa. Por favor, informe seu nome completo ou adicione um sobrenome/apelido para continuar.'
+    });
   }
 
-  req.session.userId = Number(user.id);
-  req.session.userName = user.name;
+  const result = db.prepare('INSERT INTO users(name, is_admin) VALUES(?, 0)').run(name);
+  const newUser = { id: result.lastInsertRowid, name, is_admin: 0 };
+
+  req.session.userId = Number(newUser.id);
+  req.session.userName = newUser.name;
   req.session.isAdmin = false;
   res.redirect('/gifts');
 });
