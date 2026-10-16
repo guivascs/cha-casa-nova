@@ -113,8 +113,8 @@ app.post('/login', (req, res) => {
 
   // Se for uma conta de administrador, não permite entrar sem senha
   if (user && user.is_admin) {
-    return res.render('login', { 
-      error: 'Este nome pertence ao administrador. Para acessar a administração, use a Área Administrativa com sua senha.' 
+    return res.render('login', {
+      error: 'Este nome pertence ao administrador. Para acessar a administração, use a Área Administrativa com sua senha.'
     });
   }
 
@@ -185,7 +185,7 @@ app.post('/admin/gifts/:id/delete', admin, (req, res) => { db.prepare('DELETE FR
 app.post('/admin/gifts/:id/reset', admin, (req, res) => { db.prepare('UPDATE gifts SET reserved_by = NULL, reserved_at = NULL WHERE id = ?').run(req.params.id); res.redirect('/admin'); });
 app.post('/admin/gifts/clear-all', admin, (req, res) => {
   const result = db.prepare('DELETE FROM gifts').run();
-  try { db.prepare("DELETE FROM sqlite_sequence WHERE name = 'gifts'").run(); } catch (e) {}
+  try { db.prepare("DELETE FROM sqlite_sequence WHERE name = 'gifts'").run(); } catch (e) { }
   req.session.importResult = { type: 'success', text: `Todos os presentes (${result.changes}) foram removidos com sucesso.` };
   res.redirect('/admin');
 });
