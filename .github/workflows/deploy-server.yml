@@ -17,7 +17,9 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
+            export PATH=$PATH:/usr/bin:/usr/local/bin:~/.nvm/versions/node/$(ls ~/.nvm/versions/node 2>/dev/null | tail -n 1)/bin
             cd ~/cha-casa-nova
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
             npm install --omit=dev
-            pm2 restart all
+            pm2 restart all || npx pm2 restart all
