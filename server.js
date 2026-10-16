@@ -109,27 +109,23 @@ app.post('/login', (req, res) => {
   const name = (req.body.name || '').trim();
   if (!name) return res.render('login', { error: 'Informe seu nome.' });
 
-  const user = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE').get(name);
+  let user = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE').get(name);
 
-  // Se o nome já pertence ao administrador
+  // Se o nome pertence ao administrador, não permite entrar sem senha
   if (user && user.is_admin) {
     return res.render('login', {
       error: 'Este nome pertence ao administrador. Para acessar a administração, use a Área Administrativa com sua senha.'
     });
   }
 
-  // Se o nome já foi cadastrado por outro convidado
-  if (user) {
-    return res.render('login', {
-      error: 'Este nome já foi utilizado por outra pessoa. Por favor, informe seu nome completo ou adicione um sobrenome/apelido para continuar.'
-    });
+  // Se o usuário não existir, cria; se já existir, aproveita o mesmo
+  if (!user) {
+    const result = db.prepare('INSERT INTO users(name, is_admin) VALUES(?, 0)').run(name);
+    user = { id: result.lastInsertRowid, name, is_admin: 0 };
   }
 
-  const result = db.prepare('INSERT INTO users(name, is_admin) VALUES(?, 0)').run(name);
-  const newUser = { id: result.lastInsertRowid, name, is_admin: 0 };
-
-  req.session.userId = Number(newUser.id);
-  req.session.userName = newUser.name;
+  req.session.userId = Number(user.id);
+  req.session.userName = user.name;
   req.session.isAdmin = false;
   res.redirect('/gifts');
 });
@@ -155,7 +151,7 @@ app.get('/gifts', (req, res, next) => { if (!req.session.userId) return res.redi
   res.render('gifts', { groups, myGifts, userId: req.session.userId, userName: req.session.userName });
 });
 app.post('/gifts/:id/reserve', (req, res, next) => { if (!req.session.userId) return res.status(401).json({ error: 'Faça login antes de escolher um presente.' }); if (req.session.isAdmin) return res.status(403).json({ error: 'O administrador não pode reservar presentes. Saia e entre usando um nome de convidado.' }); next(); }, (req, res) => { const result = db.prepare('UPDATE gifts SET reserved_by = ?, reserved_at = CURRENT_TIMESTAMP WHERE id = ? AND reserved_by IS NULL').run(req.session.userId, req.params.id); if (!result.changes) return res.status(409).json({ error: 'Este presente já foi reservado por outra pessoa.' }); res.json({ ok: true }); });
-app.post('/gifts/:id/unreserve', (req, res, next) => { if (!req.session.userId) return res.status(401).json({ error: 'Faça login primeiro.' }); next(); }, (req, res) => { const result = db.prepare('UPDATE gifts SET reserved_by = NULL, reserved_at = NULL WHERE id = ? AND reserved_by = ?').run(req.params.id, req.session.userId); if (!result.changes) return res.status(400).json({ error: 'Este presente não foi reservado por você.' }); res.json({ ok: true }); });
+app.post('/gifts/:id/unreserve', (req, res) => res.status(403).json({ error: 'Não é permitido desistir de um presente já escolhido.' }));
 
 app.get('/admin', admin, (req, res) => { res.render('admin', { gifts: getGifts(), categories: CATEGORIES, importResult: req.session.importResult || null, passwordResult: req.session.passwordResult || null }); delete req.session.importResult; delete req.session.passwordResult; });
 app.post('/admin/change-password', admin, (req, res) => {

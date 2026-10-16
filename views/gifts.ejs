@@ -44,9 +44,6 @@
                   <span class="category-tag"><%= gift.category %></span>
                 </div>
               </div>
-              <button type="button" class="btn-unreserve" onclick='unreserve(<%= gift.id %>, <%- JSON.stringify(gift.name) %>, this)'>
-                Desistir deste item
-              </button>
             </div>
           <% }); %>
         </div>
@@ -123,25 +120,6 @@
       }
       button.disabled = false;
       button.textContent = 'Escolher presente';
-    }
-
-    async function unreserve(id, name, button) {
-      if (!confirm(`Deseja desistir da escolha de "${name}" e deixá-lo disponível para outro convidado?`)) return;
-      button.disabled = true;
-      button.textContent = 'Cancelando...';
-      try {
-        const response = await fetch(`/gifts/${id}/unreserve`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' }
-        });
-        const data = await response.json().catch(() => ({}));
-        if (response.ok) return location.reload();
-        showMessage(data.error || 'Não foi possível cancelar a escolha.', false);
-      } catch (e) {
-        showMessage('Erro de conexão. Tente novamente.', false);
-      }
-      button.disabled = false;
-      button.textContent = 'Desistir';
     }
   </script>
 </body>

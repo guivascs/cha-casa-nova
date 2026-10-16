@@ -18,4 +18,4 @@ jobs:
             cd ~/cha-casa-nova
             git pull origin main
             npm install --omit=dev
-            pm2 reload lista-presente
+            pm2 restart all
