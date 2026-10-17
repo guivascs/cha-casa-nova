@@ -26,6 +26,19 @@
     </div>
 
     <div id="message" class="message" role="alert"></div>
+    <div id="toast" class="toast" role="status"></div>
+
+    <% if (groups.length) { %>
+    <div class="guest-toolbar">
+      <input type="search" id="giftSearch" class="guest-search" placeholder="🔍 Buscar presente..." autocomplete="off">
+      <label class="only-available"><input type="checkbox" id="onlyAvailable"> Só disponíveis</label>
+      <nav class="category-chips" aria-label="Ambientes">
+        <% groups.forEach(function (group) { %>
+          <a href="#cat-<%= group.category %>" class="chip"><%= group.category %></a>
+        <% }); %>
+      </nav>
+    </div>
+    <% } %>
 
     <!-- Seção de presentes já escolhidos pelo convidado -->
     <% if (myGifts && myGifts.length > 0) { %>
@@ -64,14 +77,14 @@
     <% } %>
 
     <% groups.forEach(function (group) { %>
-      <section class="category-section">
+      <section class="category-section" id="cat-<%= group.category %>">
         <h2 class="category-title"><%= group.category %></h2>
         <div class="list-container">
           <% group.gifts.forEach(function (gift) { %>
             <% const isMine = (gift.reserved_by === userId); %>
             <% const isReservedByOther = (gift.reserved_by && !isMine); %>
 
-            <article class="list-item <%= isMine ? 'item-mine' : (isReservedByOther ? 'reserved' : '') %>">
+            <article data-name="<%= gift.name.toLowerCase() %>" data-reserved="<%= isReservedByOther ? 1 : 0 %>" class="list-item <%= isMine ? 'item-mine' : (isReservedByOther ? 'reserved' : '') %>">
               <% if (gift.image_url) { %><img src="<%= gift.image_url %>" alt="<%= gift.name %>" class="item-image" loading="lazy"><% } %>
               <div class="item-details">
                 <h3><%= gift.name %></h3>
@@ -93,7 +106,7 @@
                   <span class="badge reserved">🔒 Já reservado</span>
                 <% } else { %>
                   <button type="button" class="btn-choose" onclick='reserve(<%= gift.id %>, <%- JSON.stringify(gift.name) %>, <%- JSON.stringify(gift.color || "") %>, this)'>
-                    Escolher presente
+                    Escolher
                   </button>
                 <% } %>
               </div>
@@ -104,6 +117,16 @@
     <% }); %>
   </main>
 
+  <div id="sheet" class="sheet-backdrop" onclick="if(event.target===this)closeSheet()">
+    <div class="sheet" role="dialog" aria-modal="true">
+      <h3>Escolher este presente?</h3>
+      <p id="sheetName" class="sheet-name"></p>
+      <p id="sheetColor" class="sheet-color"></p>
+      <button type="button" id="sheetOk" class="btn-choose btn-big">Sim, quero este presente</button>
+      <button type="button" class="btn-cancel btn-big" onclick="closeSheet()">Cancelar</button>
+    </div>
+  </div>
+
   <script>
     function showMessage(text, isSuccess) {
       const el = document.getElementById('message');
@@ -113,9 +136,19 @@
       el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    async function reserve(id, name, color, button) {
-      const colorMsg = color ? `\n(Cor preferida: ${color})` : '';
-      if (!confirm(`Deseja escolher o presente: "${name}"?${colorMsg}`)) return;
+    const setHeaderH = () => document.documentElement.style.setProperty('--header-h', document.querySelector('header').offsetHeight + 'px');
+    setHeaderH(); window.addEventListener('resize', setHeaderH);
+    let sheetAction = null;
+    function closeSheet() { document.getElementById('sheet').classList.remove('open'); sheetAction = null; }
+    function reserve(id, name, color, button) {
+      document.getElementById('sheetName').textContent = name;
+      document.getElementById('sheetColor').textContent = color ? `🎨 Cor preferida: ${color}` : '';
+      sheetAction = () => doReserve(id, name, button);
+      document.getElementById('sheet').classList.add('open');
+    }
+    document.getElementById('sheetOk').addEventListener('click', () => { const run = sheetAction; closeSheet(); if (run) run(); });
+
+    async function doReserve(id, name, button) {
       button.disabled = true;
       button.textContent = 'Reservando...';
       try {
@@ -124,14 +157,45 @@
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' }
         });
         const data = await response.json().catch(() => ({}));
-        if (response.ok) return location.reload();
+        if (response.ok) {
+          try { sessionStorage.setItem('toast', `🎉 "${name}" é seu! Obrigado pelo carinho.`); } catch (e) {}
+          return location.reload();
+        }
         showMessage(data.error || 'Não foi possível reservar este presente.', false);
       } catch (e) {
         showMessage('Erro de conexão. Tente novamente.', false);
       }
       button.disabled = false;
-      button.textContent = 'Escolher presente';
+      button.textContent = 'Escolher';
     }
+
+    function applyFilters() {
+      const q = document.getElementById('giftSearch').value.trim().toLowerCase();
+      const onlyAvail = document.getElementById('onlyAvailable').checked;
+      document.querySelectorAll('.category-section').forEach(section => {
+        let visible = 0;
+        section.querySelectorAll('.list-item').forEach(item => {
+          const show = item.dataset.name.includes(q) && !(onlyAvail && item.dataset.reserved === '1');
+          item.style.display = show ? '' : 'none';
+          if (show) visible += 1;
+        });
+        section.style.display = visible ? '' : 'none';
+      });
+    }
+    const searchEl = document.getElementById('giftSearch');
+    if (searchEl) {
+      searchEl.addEventListener('input', applyFilters);
+      document.getElementById('onlyAvailable').addEventListener('change', applyFilters);
+    }
+    try {
+      const msg = sessionStorage.getItem('toast');
+      if (msg) {
+        sessionStorage.removeItem('toast');
+        const t = document.getElementById('toast');
+        t.textContent = msg; t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 4500);
+      }
+    } catch (e) {}
   </script>
 </body>
 </html>
