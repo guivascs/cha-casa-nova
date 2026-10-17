@@ -592,6 +592,17 @@ header, .admin-header {
   transition: all 0.15s ease;
 }
 
+.btn-edit {
+  background: #f1f5f9;
+  color: #1e293b;
+  border-color: #cbd5e1;
+}
+
+.btn-edit:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
 .btn-reset {
   background: #ffffff;
   color: #475569;
@@ -1109,6 +1120,55 @@ header, .admin-header {
   border-radius: 999px;
   font-size: 0.78rem;
   font-weight: 700;
+}
+
+/* Color Tags & Badges */
+.color-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 3px 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #475569;
+  width: fit-content;
+}
+
+.color-badge strong {
+  color: #0f172a;
+}
+
+.color-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  color: #334155;
+}
+
+.gift-color-pill {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: #475569;
+}
+
+.gift-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
 }
 
 /* ==========================================================================

@@ -33,6 +33,7 @@ db.exec(`
 `);
 const giftColumns = db.prepare('PRAGMA table_info(gifts)').all();
 if (!giftColumns.some(column => column.name === 'category')) db.exec("ALTER TABLE gifts ADD COLUMN category TEXT NOT NULL DEFAULT 'Outros'");
+if (!giftColumns.some(column => column.name === 'color')) db.exec("ALTER TABLE gifts ADD COLUMN color TEXT");
 db.prepare("UPDATE gifts SET category = 'Outros' WHERE category IS NULL OR TRIM(category) = ''").run();
 
 // Auto-migration: Remove UNIQUE constraint on reserved_by if present from previous version
@@ -100,8 +101,8 @@ app.use(session({
 
 const admin = (req, res, next) => req.session.isAdmin ? next() : res.redirect('/admin/login');
 const validCategory = value => CATEGORIES.includes(value) ? value : 'Outros';
-const getGifts = () => db.prepare('SELECT g.id,g.name,g.category,g.reserved_by,g.reserved_at,u.name reserved_by_name FROM gifts g LEFT JOIN users u ON u.id=g.reserved_by ORDER BY g.category,g.name').all();
-function csvGifts(content) { const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/); const results = []; for (let i = 0; i < lines.length; i += 1) { const line = lines[i].trim(); if (!line) continue; const columns = line.split(/[;,]/).map(value => value.trim().replace(/^"|"$/g, '')); if (i === 0 && columns[0].toLowerCase() === 'nome') continue; if (columns[0]) results.push({ name: columns[0], category: validCategory(columns[1] || 'Outros') }); } const unique = new Map(); for (const gift of results) unique.set(`${gift.name.toLocaleLowerCase('pt-BR')}|${gift.category}`, gift); return [...unique.values()]; }
+const getGifts = () => db.prepare('SELECT g.id,g.name,g.category,g.color,g.reserved_by,g.reserved_at,u.name reserved_by_name FROM gifts g LEFT JOIN users u ON u.id=g.reserved_by ORDER BY g.category,g.name').all();
+function csvGifts(content) { const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/); const results = []; for (let i = 0; i < lines.length; i += 1) { const line = lines[i].trim(); if (!line) continue; const columns = line.split(/[;,]/).map(value => value.trim().replace(/^"|"$/g, '')); if (i === 0 && columns[0].toLowerCase() === 'nome') continue; if (columns[0]) results.push({ name: columns[0], category: validCategory(columns[1] || 'Outros'), color: (columns[2] || '').trim() || null }); } const unique = new Map(); for (const gift of results) unique.set(`${gift.name.toLocaleLowerCase('pt-BR')}|${gift.category}`, gift); return [...unique.values()]; }
 
 app.get('/', (req, res) => res.redirect(req.session.userId ? (req.session.isAdmin ? '/admin' : '/gifts') : '/login'));
 app.get('/login', (req, res) => res.render('login', { error: null }));
@@ -145,7 +146,7 @@ app.post('/admin/login', (req, res) => {
 app.get('/logout', (req, res) => req.session.destroy(() => res.redirect('/login'))); app.get('/admin/gifts', (req, res) => res.redirect('/admin'));
 
 app.get('/gifts', (req, res, next) => { if (!req.session.userId) return res.redirect('/login'); if (req.session.isAdmin) return res.redirect('/admin'); next(); }, (req, res) => {
-  const gifts = db.prepare('SELECT id,name,category,reserved_by FROM gifts ORDER BY category,name').all();
+  const gifts = db.prepare('SELECT id,name,category,color,reserved_by FROM gifts ORDER BY category,name').all();
   const myGifts = gifts.filter(gift => gift.reserved_by === req.session.userId);
   const groups = CATEGORIES.map(category => ({ category, gifts: gifts.filter(gift => gift.category === category) })).filter(group => group.gifts.length);
   res.render('gifts', { groups, myGifts, userId: req.session.userId, userName: req.session.userName });
@@ -180,8 +181,52 @@ app.post('/admin/change-password', admin, (req, res) => {
   req.session.passwordResult = { type: 'success', text: 'Senha alterada com sucesso!' };
   res.redirect('/admin');
 });
-app.post('/admin/gifts', admin, (req, res) => { const name = (req.body.name || '').trim(); const category = validCategory(req.body.category); if (name) db.prepare('INSERT INTO gifts(name,category) VALUES(?,?)').run(name, category); res.redirect('/admin'); });
-app.post('/admin/gifts/import', admin, upload.single('csvFile'), (req, res) => { if (!req.file) { req.session.importResult = { type: 'error', text: 'Selecione um arquivo CSV para importar.' }; return res.redirect('/admin'); } if (!req.file.originalname.toLowerCase().endsWith('.csv')) { req.session.importResult = { type: 'error', text: 'O arquivo deve ter extensão .csv.' }; return res.redirect('/admin'); } const gifts = csvGifts(req.file.buffer.toString('utf8')); let added = 0; let skipped = 0; const exists = db.prepare('SELECT 1 FROM gifts WHERE name = ? COLLATE NOCASE AND category = ?'); const insert = db.prepare('INSERT INTO gifts(name,category) VALUES(?,?)'); db.transaction(() => { for (const gift of gifts) { if (exists.get(gift.name, gift.category)) skipped += 1; else { insert.run(gift.name, gift.category); added += 1; } } })(); req.session.importResult = { type: 'success', text: `Importação concluída: ${added} presente(s) adicionado(s) e ${skipped} ignorado(s).` }; res.redirect('/admin'); });
+app.post('/admin/gifts', admin, (req, res) => {
+  const name = (req.body.name || '').trim();
+  const category = validCategory(req.body.category);
+  const color = (req.body.color || '').trim() || null;
+  if (name) db.prepare('INSERT INTO gifts(name,category,color) VALUES(?,?,?)').run(name, category, color);
+  res.redirect('/admin');
+});
+app.post('/admin/gifts/import', admin, upload.single('csvFile'), (req, res) => {
+  if (!req.file) {
+    req.session.importResult = { type: 'error', text: 'Selecione um arquivo CSV para importar.' };
+    return res.redirect('/admin');
+  }
+  if (!req.file.originalname.toLowerCase().endsWith('.csv')) {
+    req.session.importResult = { type: 'error', text: 'O arquivo deve ter extensão .csv.' };
+    return res.redirect('/admin');
+  }
+  const gifts = csvGifts(req.file.buffer.toString('utf8'));
+  let added = 0;
+  let updated = 0;
+  const findGift = db.prepare('SELECT id, color, category FROM gifts WHERE name = ? COLLATE NOCASE');
+  const insert = db.prepare('INSERT INTO gifts(name,category,color) VALUES(?,?,?)');
+  const update = db.prepare('UPDATE gifts SET category = ?, color = COALESCE(?, color) WHERE id = ?');
+  db.transaction(() => {
+    for (const gift of gifts) {
+      const existing = findGift.get(gift.name);
+      if (existing) {
+        update.run(gift.category, gift.color, existing.id);
+        updated += 1;
+      } else {
+        insert.run(gift.name, gift.category, gift.color);
+        added += 1;
+      }
+    }
+  })();
+  req.session.importResult = { type: 'success', text: `Importação concluída: ${added} presente(s) adicionado(s) e ${updated} atualizado(s).` };
+  res.redirect('/admin');
+});
+app.post('/admin/gifts/:id/edit', admin, (req, res) => {
+  const name = (req.body.name || '').trim();
+  const category = validCategory(req.body.category);
+  const color = (req.body.color || '').trim() || null;
+  if (name) {
+    db.prepare('UPDATE gifts SET name = ?, category = ?, color = ? WHERE id = ?').run(name, category, color, req.params.id);
+  }
+  res.redirect('/admin');
+});
 app.post('/admin/gifts/:id/delete', admin, (req, res) => { db.prepare('DELETE FROM gifts WHERE id = ?').run(req.params.id); res.redirect('/admin'); });
 app.post('/admin/gifts/:id/reset', admin, (req, res) => { db.prepare('UPDATE gifts SET reserved_by = NULL, reserved_at = NULL WHERE id = ?').run(req.params.id); res.redirect('/admin'); });
 app.post('/admin/gifts/clear-all', admin, (req, res) => {

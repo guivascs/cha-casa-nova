@@ -41,7 +41,12 @@
                 <span class="my-gift-bullet">✓</span>
                 <div>
                   <strong><%= gift.name %></strong>
-                  <span class="category-tag"><%= gift.category %></span>
+                  <div class="gift-tags">
+                    <span class="category-tag"><%= gift.category %></span>
+                    <% if (gift.color) { %>
+                      <span class="color-tag">🎨 Cor preferida: <strong><%= gift.color %></strong></span>
+                    <% } %>
+                  </div>
                 </div>
               </div>
             </div>
@@ -69,6 +74,12 @@
             <article class="list-item <%= isMine ? 'item-mine' : (isReservedByOther ? 'reserved' : '') %>">
               <div class="item-details">
                 <h3><%= gift.name %></h3>
+                <% if (gift.color) { %>
+                  <div class="color-badge">
+                    <span class="color-icon">🎨</span>
+                    <span>Cor preferida: <strong><%= gift.color %></strong></span>
+                  </div>
+                <% } %>
                 <% if (isMine) { %>
                   <span class="badge-status badge-mine">✓ Escolhido por você</span>
                 <% } %>
@@ -76,13 +87,11 @@
 
               <div class="list-action">
                 <% if (isMine) { %>
-                  <button type="button" class="btn-unreserve" onclick='unreserve(<%= gift.id %>, <%- JSON.stringify(gift.name) %>, this)'>
-                    Desistir
-                  </button>
+                  <span class="badge-status badge-mine">✓ Seu presente</span>
                 <% } else if (isReservedByOther) { %>
                   <span class="badge reserved">🔒 Já reservado</span>
                 <% } else { %>
-                  <button type="button" class="btn-choose" onclick='reserve(<%= gift.id %>, <%- JSON.stringify(gift.name) %>, this)'>
+                  <button type="button" class="btn-choose" onclick='reserve(<%= gift.id %>, <%- JSON.stringify(gift.name) %>, <%- JSON.stringify(gift.color || "") %>, this)'>
                     Escolher presente
                   </button>
                 <% } %>
@@ -103,8 +112,9 @@
       el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    async function reserve(id, name, button) {
-      if (!confirm(`Deseja escolher o presente: "${name}"?`)) return;
+    async function reserve(id, name, color, button) {
+      const colorMsg = color ? `\n(Cor preferida: ${color})` : '';
+      if (!confirm(`Deseja escolher o presente: "${name}"?${colorMsg}`)) return;
       button.disabled = true;
       button.textContent = 'Reservando...';
       try {
