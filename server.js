@@ -5,11 +5,28 @@ const bcrypt = require('bcryptjs');
 const Database = require('better-sqlite3');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const db = new Database(path.join(__dirname, 'cha-casa-nova.db'));
 const PORT = process.env.PORT || 3000;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 } });
+const UPLOAD_DIR = path.join(__dirname, 'uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const IMAGE_TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
+const imageUpload = multer({
+  storage: multer.diskStorage({
+    destination: UPLOAD_DIR,
+    filename: (req, file, cb) => cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${IMAGE_TYPES[file.mimetype]}`)
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, !!IMAGE_TYPES[file.mimetype])
+});
+const handleImage = (req, res, next) => imageUpload.single('image')(req, res, err => {
+  if (err) { req.session.importResult = { type: 'error', text: err.code === 'LIMIT_FILE_SIZE' ? 'A imagem deve ter no máximo 5 MB.' : 'Não foi possível enviar a imagem.' }; return res.redirect('/admin'); }
+  next();
+});
+const removeImage = url => { if (url && url.startsWith('/uploads/')) fs.unlink(path.join(UPLOAD_DIR, path.basename(url)), () => {}); };
 const CATEGORIES = ['Cozinha', 'Sala', 'Quarto', 'Banheiro', 'Escritório', 'Lavanderia', 'Outros'];
 
 db.pragma('foreign_keys = ON');
@@ -87,7 +104,7 @@ db.prepare('UPDATE users SET is_admin = 0 WHERE id != ?').run(adminUser.id);
 
 app.set('trust proxy', 1);
 app.set('view engine', 'ejs'); app.set('views', path.join(__dirname, 'views'));
-app.use(express.urlencoded({ extended: true })); app.use(express.json()); app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.urlencoded({ extended: true })); app.use(express.json()); app.use(express.static(path.join(__dirname, 'public'))); app.use('/uploads', express.static(UPLOAD_DIR));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'troque-este-segredo-em-producao',
   resave: false,
@@ -99,9 +116,23 @@ app.use(session({
   }
 }));
 
+function notifyReservation(giftId, guestName) {
+  const topic = (process.env.NTFY_TOPIC || '').trim();
+  if (!topic) return;
+  const gift = db.prepare('SELECT name FROM gifts WHERE id = ?').get(giftId);
+  if (!gift) return;
+  const base = (process.env.NTFY_SERVER || 'https://ntfy.sh').replace(/\/+$/, '');
+  // Cabeçalhos HTTP não aceitam acentos; título vai em UTF-8 pelo corpo da mensagem.
+  fetch(`${base}/${encodeURIComponent(topic)}`, {
+    method: 'POST',
+    headers: { Tags: 'gift' },
+    body: `${guestName} escolheu: ${gift.name}`,
+    signal: AbortSignal.timeout(5000)
+  }).catch(err => console.error('Falha ao enviar notificação ntfy:', err.message));
+}
 const admin = (req, res, next) => req.session.isAdmin ? next() : res.redirect('/admin/login');
 const validCategory = value => CATEGORIES.includes(value) ? value : 'Outros';
-const getGifts = () => db.prepare('SELECT g.id,g.name,g.category,g.color,g.reserved_by,g.reserved_at,u.name reserved_by_name FROM gifts g LEFT JOIN users u ON u.id=g.reserved_by ORDER BY g.category,g.name').all();
+const getGifts = () => db.prepare('SELECT g.id,g.name,g.category,g.color,g.image_url,g.reserved_by,g.reserved_at,u.name reserved_by_name FROM gifts g LEFT JOIN users u ON u.id=g.reserved_by ORDER BY g.category,g.name').all();
 function csvGifts(content) { const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/); const results = []; for (let i = 0; i < lines.length; i += 1) { const line = lines[i].trim(); if (!line) continue; const columns = line.split(/[;,]/).map(value => value.trim().replace(/^"|"$/g, '')); if (i === 0 && columns[0].toLowerCase() === 'nome') continue; if (columns[0]) results.push({ name: columns[0], category: validCategory(columns[1] || 'Outros'), color: (columns[2] || '').trim() || null }); } const unique = new Map(); for (const gift of results) unique.set(`${gift.name.toLocaleLowerCase('pt-BR')}|${gift.category}`, gift); return [...unique.values()]; }
 
 app.get('/', (req, res) => res.redirect(req.session.userId ? (req.session.isAdmin ? '/admin' : '/gifts') : '/login'));
@@ -146,12 +177,12 @@ app.post('/admin/login', (req, res) => {
 app.get('/logout', (req, res) => req.session.destroy(() => res.redirect('/login'))); app.get('/admin/gifts', (req, res) => res.redirect('/admin'));
 
 app.get('/gifts', (req, res, next) => { if (!req.session.userId) return res.redirect('/login'); if (req.session.isAdmin) return res.redirect('/admin'); next(); }, (req, res) => {
-  const gifts = db.prepare('SELECT id,name,category,color,reserved_by FROM gifts ORDER BY category,name').all();
+  const gifts = db.prepare('SELECT id,name,category,color,image_url,reserved_by FROM gifts ORDER BY category,name').all();
   const myGifts = gifts.filter(gift => gift.reserved_by === req.session.userId);
   const groups = CATEGORIES.map(category => ({ category, gifts: gifts.filter(gift => gift.category === category) })).filter(group => group.gifts.length);
   res.render('gifts', { groups, myGifts, userId: req.session.userId, userName: req.session.userName });
 });
-app.post('/gifts/:id/reserve', (req, res, next) => { if (!req.session.userId) return res.status(401).json({ error: 'Faça login antes de escolher um presente.' }); if (req.session.isAdmin) return res.status(403).json({ error: 'O administrador não pode reservar presentes. Saia e entre usando um nome de convidado.' }); next(); }, (req, res) => { const result = db.prepare('UPDATE gifts SET reserved_by = ?, reserved_at = CURRENT_TIMESTAMP WHERE id = ? AND reserved_by IS NULL').run(req.session.userId, req.params.id); if (!result.changes) return res.status(409).json({ error: 'Este presente já foi reservado por outra pessoa.' }); res.json({ ok: true }); });
+app.post('/gifts/:id/reserve', (req, res, next) => { if (!req.session.userId) return res.status(401).json({ error: 'Faça login antes de escolher um presente.' }); if (req.session.isAdmin) return res.status(403).json({ error: 'O administrador não pode reservar presentes. Saia e entre usando um nome de convidado.' }); next(); }, (req, res) => { const result = db.prepare('UPDATE gifts SET reserved_by = ?, reserved_at = CURRENT_TIMESTAMP WHERE id = ? AND reserved_by IS NULL').run(req.session.userId, req.params.id); if (!result.changes) return res.status(409).json({ error: 'Este presente já foi reservado por outra pessoa.' }); notifyReservation(req.params.id, req.session.userName); res.json({ ok: true }); });
 app.post('/gifts/:id/unreserve', (req, res) => res.status(403).json({ error: 'Não é permitido desistir de um presente já escolhido.' }));
 
 app.get('/admin', admin, (req, res) => { res.render('admin', { gifts: getGifts(), categories: CATEGORIES, importResult: req.session.importResult || null, passwordResult: req.session.passwordResult || null }); delete req.session.importResult; delete req.session.passwordResult; });
@@ -181,11 +212,13 @@ app.post('/admin/change-password', admin, (req, res) => {
   req.session.passwordResult = { type: 'success', text: 'Senha alterada com sucesso!' };
   res.redirect('/admin');
 });
-app.post('/admin/gifts', admin, (req, res) => {
+app.post('/admin/gifts', admin, handleImage, (req, res) => {
   const name = (req.body.name || '').trim();
   const category = validCategory(req.body.category);
   const color = (req.body.color || '').trim() || null;
-  if (name) db.prepare('INSERT INTO gifts(name,category,color) VALUES(?,?,?)').run(name, category, color);
+  const image = req.file ? `/uploads/${req.file.filename}` : null;
+  if (name) db.prepare('INSERT INTO gifts(name,category,color,image_url) VALUES(?,?,?,?)').run(name, category, color, image);
+  else if (req.file) removeImage(image);
   res.redirect('/admin');
 });
 app.post('/admin/gifts/import', admin, upload.single('csvFile'), (req, res) => {
@@ -218,18 +251,24 @@ app.post('/admin/gifts/import', admin, upload.single('csvFile'), (req, res) => {
   req.session.importResult = { type: 'success', text: `Importação concluída: ${added} presente(s) adicionado(s) e ${updated} atualizado(s).` };
   res.redirect('/admin');
 });
-app.post('/admin/gifts/:id/edit', admin, (req, res) => {
+app.post('/admin/gifts/:id/edit', admin, handleImage, (req, res) => {
   const name = (req.body.name || '').trim();
   const category = validCategory(req.body.category);
   const color = (req.body.color || '').trim() || null;
-  if (name) {
-    db.prepare('UPDATE gifts SET name = ?, category = ?, color = ? WHERE id = ?').run(name, category, color, req.params.id);
-  }
+  const current = db.prepare('SELECT image_url FROM gifts WHERE id = ?').get(req.params.id);
+  if (name && current) {
+    let image = current.image_url;
+    if (req.file) image = `/uploads/${req.file.filename}`;
+    else if (req.body.removeImage) image = null;
+    db.prepare('UPDATE gifts SET name = ?, category = ?, color = ?, image_url = ? WHERE id = ?').run(name, category, color, image, req.params.id);
+    if (image !== current.image_url) removeImage(current.image_url);
+  } else if (req.file) removeImage(`/uploads/${req.file.filename}`);
   res.redirect('/admin');
 });
-app.post('/admin/gifts/:id/delete', admin, (req, res) => { db.prepare('DELETE FROM gifts WHERE id = ?').run(req.params.id); res.redirect('/admin'); });
+app.post('/admin/gifts/:id/delete', admin, (req, res) => { removeImage(db.prepare('SELECT image_url FROM gifts WHERE id = ?').get(req.params.id)?.image_url); db.prepare('DELETE FROM gifts WHERE id = ?').run(req.params.id); res.redirect('/admin'); });
 app.post('/admin/gifts/:id/reset', admin, (req, res) => { db.prepare('UPDATE gifts SET reserved_by = NULL, reserved_at = NULL WHERE id = ?').run(req.params.id); res.redirect('/admin'); });
 app.post('/admin/gifts/clear-all', admin, (req, res) => {
+  db.prepare('SELECT image_url FROM gifts').all().forEach(g => removeImage(g.image_url));
   const result = db.prepare('DELETE FROM gifts').run();
   try { db.prepare("DELETE FROM sqlite_sequence WHERE name = 'gifts'").run(); } catch (e) { }
   req.session.importResult = { type: 'success', text: `Todos os presentes (${result.changes}) foram removidos com sucesso.` };

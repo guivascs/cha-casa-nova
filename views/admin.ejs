@@ -158,7 +158,7 @@
                     <div class="gift-title-cell">
                       <span class="gift-bullet <%= gift.reserved_by ? 'bullet-reserved' : 'bullet-available' %>"></span>
                       <div>
-                        <span class="gift-name"><%= gift.name %></span>
+                        <span class="gift-name"><% if (gift.image_url) { %><img src="<%= gift.image_url %>" alt="" class="gift-thumb"><% } %><%= gift.name %></span>
                         <% if (gift.color) { %>
                           <span class="gift-color-pill">🎨 Cor: <strong><%= gift.color %></strong></span>
                         <% } %>
@@ -190,7 +190,7 @@
                   <td style="text-align: right;">
                     <div class="actions-cell">
                       <button type="button" class="btn-action btn-edit" title="Editar presente" 
-                              onclick='openEditModal(<%= gift.id %>, <%- JSON.stringify(gift.name) %>, <%- JSON.stringify(gift.category) %>, <%- JSON.stringify(gift.color || "") %>)'>
+                              onclick='openEditModal(<%= gift.id %>, <%- JSON.stringify(gift.name) %>, <%- JSON.stringify(gift.category) %>, <%- JSON.stringify(gift.color || "") %>, <%- JSON.stringify(gift.image_url || "") %>)'>
                         ✏️ Editar
                       </button>
                       <% if (gift.reserved_by) { %>
@@ -231,7 +231,7 @@
         <h2>➕ Adicionar Presente</h2>
         <button type="button" class="modal-close" onclick="closeModal('modalAddGift')">✕</button>
       </div>
-      <form method="POST" action="/admin/gifts">
+      <form method="POST" action="/admin/gifts" enctype="multipart/form-data">
         <label for="giftName">Nome do presente:</label>
         <input id="giftName" name="name" type="text" placeholder="Ex: Jogo de panelas Tramontina" required autofocus>
         
@@ -244,6 +244,9 @@
 
         <label for="giftColor">Cor preferida (opcional):</label>
         <input id="giftColor" name="color" type="text" placeholder="Ex: Preto, Inox, Branco, Cinza...">
+
+        <label for="addGiftImage">Imagem (opcional, até 5 MB):</label>
+        <input id="addGiftImage" name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
 
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick="closeModal('modalAddGift')">Cancelar</button>
@@ -260,7 +263,7 @@
         <h2>✏️ Editar Presente</h2>
         <button type="button" class="modal-close" onclick="closeModal('modalEditGift')">✕</button>
       </div>
-      <form id="editGiftForm" method="POST" action="">
+      <form id="editGiftForm" method="POST" action="" enctype="multipart/form-data">
         <label for="editGiftName">Nome do presente:</label>
         <input id="editGiftName" name="name" type="text" required autofocus>
         
@@ -273,6 +276,13 @@
 
         <label for="editGiftColor">Cor preferida (opcional):</label>
         <input id="editGiftColor" name="color" type="text" placeholder="Ex: Preto, Inox, Branco, Cinza...">
+
+        <div id="editImageCurrent" style="display:none;margin-top:8px">
+          <img id="editImagePreview" alt="" style="max-height:80px;border-radius:8px;display:block;margin-bottom:4px">
+          <label style="font-weight:400"><input type="checkbox" name="removeImage" value="1"> Remover imagem atual</label>
+        </div>
+        <label for="editGiftImage">Imagem (enviar nova substitui a atual):</label>
+        <input id="editGiftImage" name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
 
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick="closeModal('modalEditGift')">Cancelar</button>
@@ -367,12 +377,18 @@
       }
     }
 
-    function openEditModal(id, name, category, color) {
+    function openEditModal(id, name, category, color, imageUrl) {
       const form = document.getElementById('editGiftForm');
       form.action = `/admin/gifts/${id}/edit`;
       document.getElementById('editGiftName').value = name;
       document.getElementById('editGiftCategory').value = category;
       document.getElementById('editGiftColor').value = color || '';
+      form.reset();
+      document.getElementById('editGiftName').value = name;
+      document.getElementById('editGiftCategory').value = category;
+      document.getElementById('editGiftColor').value = color || '';
+      document.getElementById('editImageCurrent').style.display = imageUrl ? 'block' : 'none';
+      document.getElementById('editImagePreview').src = imageUrl || '';
       openModal('modalEditGift');
     }
 

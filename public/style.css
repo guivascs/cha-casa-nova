@@ -1202,3 +1202,6 @@ header, .admin-header {
     overflow-x: auto;
   }
 }
+.item-image { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; flex-shrink: 0; }
+.list-item .item-details { flex: 1; }
+.gift-thumb { width: 36px; height: 36px; object-fit: cover; border-radius: 6px; vertical-align: middle; margin-right: 8px; }

@@ -72,6 +72,7 @@
             <% const isReservedByOther = (gift.reserved_by && !isMine); %>
 
             <article class="list-item <%= isMine ? 'item-mine' : (isReservedByOther ? 'reserved' : '') %>">
+              <% if (gift.image_url) { %><img src="<%= gift.image_url %>" alt="<%= gift.name %>" class="item-image" loading="lazy"><% } %>
               <div class="item-details">
                 <h3><%= gift.name %></h3>
                 <% if (gift.color) { %>

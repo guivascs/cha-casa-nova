@@ -3,3 +3,4 @@ package-lock.json
 .env
 cha-casa-nova.db
 .DS_Store
+uploads/

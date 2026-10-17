@@ -11,15 +11,25 @@ jobs:
 
     steps:
       - name: Executar Deploy na VM via SSH
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
+          envs: NTFY_TOPIC
           script: |
             export PATH=$PATH:/usr/bin:/usr/local/bin:~/.nvm/versions/node/$(ls ~/.nvm/versions/node 2>/dev/null | tail -n 1)/bin
             cd ~/cha-casa-nova
             git fetch origin main
             git reset --hard origin/main
             npm install --omit=dev
+            mkdir -p uploads
+            if [ -n "$NTFY_TOPIC" ]; then
+              touch .env
+              grep -v '^NTFY_TOPIC=' .env > .env.tmp || true
+              echo "NTFY_TOPIC=$NTFY_TOPIC" >> .env.tmp
+              mv .env.tmp .env
+            fi
             pm2 restart all || npx pm2 restart all
